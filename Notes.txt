@@ -1,0 +1,32 @@
+Step 1) 
+npm init -y
+npm i express chess.js ejs socket.io
+go to the website and bring the socket.io cdn and put in to the indes.ejs
+
+> sare static file public me ati h
+
+> index.ejs me comment kaise kreein?
+ <!-- Public yha nhi likhete bcoz automatically public ajata h agr likhdege toh 2 br hojyga --> 
+
+> me joh bhjunga server kp bhejuga server apko bhejega
+5 bande ek server pe control hota h ki joh hey receive hua h ky yeh yeh sbko bhjn ya kisi ek ko 
+eg - group chat me server sbko bhejta h including apko
+jb ap kuch type krte ho toh server apko chodk bhejta h usko kehte h broadcasting 
+
+------------------------connection k liye--------------------------
+
+io.on("connection",function (uniquesocket){
+    console.log("connected");
+
+    uniquesocket.on("churan", function(){
+        io.emit("churan papdi");
+    });
+});
+
+>.
+const socket = io();// jesehi yeh line chlegi tmhr system se direct req chle jygi backend me
+
+socket.emit("churan")
+socket.on("churan papdi",function(){
+    console.log("churan papdi recived");
+})

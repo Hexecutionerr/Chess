@@ -1,0 +1,21 @@
+{
+  "name": "chess",
+  "version": "1.0.0",
+  "description": "Step 1) npm init -y",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "chess.js": "^1.4.0",
+    "ejs": "^3.1.10",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.1"
+  }
+}
