@@ -9,9 +9,10 @@ const boardElement = document.getElementById("chessboard");
 // ─── State ────────────────────────────────────────────────────
 let draggedPiece = null;
 let sourceSquare = null;
-let playerRole = null;       // "w", "b", or null (spectator)
-let selectedSquare = null;   // { row, col } for click-to-move
-let lastMove = null;         // { from, to } algebraic notation
+let playerRole = null;          // "w", "b", or null (spectator)
+let selectedSquare = null;      // { row, col } for click-to-move
+let currentLegalMoves = [];     // Array of Chess.js verbose move objects for selectedSquare
+let lastMove = null;            // { from, to } algebraic notation
 let isGameOver = false;
 let isFlipped = false;
 let moveHistory = [];
@@ -86,6 +87,23 @@ function playSound(type) {
     if (s) {
         s.currentTime = 0;
         s.play().catch(() => {});
+    }
+}
+
+// ─── Turn Verification Helper ─────────────────────────────────
+function isPlayerTurn() {
+    return !isGameOver && Boolean(playerRole) && chess.turn() === playerRole;
+}
+
+// ─── Subtle Invalid Feedback ──────────────────────────────────
+function triggerSubtleFeedback(row, col) {
+    if (row === undefined || col === undefined) return;
+    const el = boardElement.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+    if (el) {
+        el.classList.remove("invalid-feedback");
+        void el.offsetWidth; // Force CSS reflow to re-trigger animation
+        el.classList.add("invalid-feedback");
+        setTimeout(() => el.classList.remove("invalid-feedback"), 250);
     }
 }
 
@@ -184,7 +202,6 @@ function updateCapturedPieces() {
 
     const diff = whiteMaterial - blackMaterial;
 
-    // Helper to render mini piece SVGs into a container
     function renderPieces(container, pieces) {
         container.innerHTML = "";
         pieces.forEach(p => {
@@ -276,7 +293,6 @@ function updateMoveHistory(history) {
         movesBody.appendChild(row);
     }
 
-    // Auto-scroll moves table to bottom
     movesTableWrap.scrollTop = movesTableWrap.scrollHeight;
 }
 
@@ -304,6 +320,137 @@ function updateTurnIndicators() {
         gameTurnPill.style.borderColor = "var(--border-subtle)";
     }
 }
+
+// ─── Algebraic Notation Helpers ──────────────────────────────
+function toAlgebraic(row, col) {
+    return `${String.fromCharCode(97 + col)}${8 - row}`;
+}
+
+// ─── Piece Selection (Phase 2 Experience) ─────────────────────
+const selectPiece = (row, col) => {
+    if (isGameOver) return;
+
+    // Must be the player's turn to select a piece
+    if (!isPlayerTurn()) {
+        triggerSubtleFeedback(row, col);
+        showToast("Wait for your turn!");
+        return;
+    }
+
+    const from = toAlgebraic(row, col);
+    const piece = chess.get(from);
+    if (!piece || piece.color !== playerRole) {
+        triggerSubtleFeedback(row, col);
+        return;
+    }
+
+    // Click selected piece again → deselect
+    if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) {
+        selectedSquare = null;
+        currentLegalMoves = [];
+        renderBoard();
+        return;
+    }
+
+    // Click another own piece → switch selection and update legal moves
+    selectedSquare = { row, col };
+
+    // Use Chess.js legal move generation (strictly respects turn, check, checkmate, pins, king safety, captures, castling, en passant, promotion)
+    currentLegalMoves = chess.moves({ square: from, verbose: true });
+    renderBoard();
+};
+
+// ─── Valid Move Highlighting (Phase 2 Experience) ─────────────
+const highlightValidMoves = (square) => {
+    // Highlight the selected square
+    const selectedEl = boardElement.querySelector(
+        `[data-row="${square.row}"][data-col="${square.col}"]`
+    );
+    if (selectedEl) {
+        selectedEl.classList.add("selected");
+    }
+
+    // Display legal move indicators for every legal destination
+    currentLegalMoves.forEach(move => {
+        const toCol = move.to.charCodeAt(0) - 97;
+        const toRow = 8 - parseInt(move.to[1]);
+        const targetEl = boardElement.querySelector(
+            `[data-row="${toRow}"][data-col="${toCol}"]`
+        );
+
+        if (targetEl) {
+            // Check for capture (including en passant captures where move.flags contains 'e')
+            const isCapture = Boolean(
+                move.captured ||
+                (move.flags && (move.flags.includes("c") || move.flags.includes("e")))
+            );
+
+            if (isCapture) {
+                // Legal capture: show clear capture indicator/ring
+                targetEl.classList.add("has-valid-capture");
+                const ring = document.createElement("div");
+                ring.className = "valid-capture-ring";
+                targetEl.appendChild(ring);
+            } else {
+                // Legal empty destination: show small subtle circular dot
+                targetEl.classList.add("has-valid-move");
+                const dot = document.createElement("div");
+                dot.className = "valid-move-dot";
+                targetEl.appendChild(dot);
+            }
+        }
+    });
+};
+
+// ─── Attempt Move (Client Validation & Dispatch) ─────────────
+const attemptMove = (source, target) => {
+    if (!isPlayerTurn()) {
+        triggerSubtleFeedback(target.row, target.col);
+        return;
+    }
+
+    const from = toAlgebraic(source.row, source.col);
+    const to = toAlgebraic(target.row, target.col);
+
+    // Verify move is in the legal moves generated by Chess.js
+    const legalMove = currentLegalMoves.find(m => m.from === from && m.to === to);
+
+    if (legalMove) {
+        // Legal destination: execute move
+        handleMove(source, target, legalMove);
+    } else {
+        // Illegal destination: do nothing / provide subtle feedback
+        triggerSubtleFeedback(target.row, target.col);
+        selectedSquare = null;
+        currentLegalMoves = [];
+        renderBoard();
+    }
+};
+
+// ─── Handle Move (Emit to Server) ─────────────────────────────
+const handleMove = (source, target, legalMove) => {
+    const from = toAlgebraic(source.row, source.col);
+    const to = toAlgebraic(target.row, target.col);
+
+    const piece = chess.get(from);
+    const isPromotion = Boolean(
+        (legalMove && legalMove.promotion) ||
+        (piece && piece.type === "p" &&
+            ((piece.color === "w" && target.row === 0) ||
+             (piece.color === "b" && target.row === 7)))
+    );
+
+    const move = { from, to };
+    if (isPromotion) {
+        move.promotion = "q";
+    }
+
+    socket.emit("move", move);
+
+    // Clean up selection after move execution
+    selectedSquare = null;
+    currentLegalMoves = [];
+};
 
 // ─── Board Rendering ─────────────────────────────────────────
 const renderBoard = () => {
@@ -337,17 +484,25 @@ const renderBoard = () => {
                 pieceElement.classList.add("piece");
                 pieceElement.style.backgroundImage = `url('${getPieceImage(square)}')`;
 
-                const canDrag = !isGameOver && playerRole === square.color;
+                // Draggable only when it's the player's turn and own piece
+                const canDrag = !isGameOver && playerRole === square.color && chess.turn() === playerRole;
                 pieceElement.draggable = canDrag;
                 if (canDrag) pieceElement.classList.add("draggable");
 
-                // Click — select piece for click-to-move
+                // Click on piece:
                 pieceElement.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    if (!isGameOver && playerRole === square.color) {
+                    if (isGameOver) return;
+
+                    // If clicking own piece: select, switch selection, or deselect
+                    if (playerRole === square.color) {
                         selectPiece(rowindex, squareindex);
                     } else if (selectedSquare) {
-                        handleMove(selectedSquare, { row: rowindex, col: squareindex });
+                        // Clicking opponent piece when a piece is selected: attempt capture
+                        attemptMove(selectedSquare, { row: rowindex, col: squareindex });
+                    } else {
+                        // Clicked opponent piece with no piece selected: subtle feedback
+                        triggerSubtleFeedback(rowindex, squareindex);
                     }
                 });
 
@@ -356,6 +511,8 @@ const renderBoard = () => {
                     if (canDrag) {
                         draggedPiece = pieceElement;
                         sourceSquare = { row: rowindex, col: squareindex };
+                        // Immediately select and display legal moves on drag start
+                        selectPiece(rowindex, squareindex);
                         e.dataTransfer.effectAllowed = "move";
                         setTimeout(() => pieceElement.classList.add("dragging"), 0);
                     }
@@ -371,10 +528,12 @@ const renderBoard = () => {
                 squareElement.appendChild(pieceElement);
             }
 
-            // Click on square — move destination
+            // Click on square (empty destination or square background)
             squareElement.addEventListener("click", () => {
-                if (selectedSquare && !isGameOver) {
-                    handleMove(selectedSquare, { row: rowindex, col: squareindex });
+                if (isGameOver) return;
+
+                if (selectedSquare) {
+                    attemptMove(selectedSquare, { row: rowindex, col: squareindex });
                 }
             });
 
@@ -387,12 +546,12 @@ const renderBoard = () => {
             // Drop
             squareElement.addEventListener("drop", (e) => {
                 e.preventDefault();
-                if (draggedPiece) {
+                if (draggedPiece && sourceSquare) {
                     const targetSquare = {
                         row: parseInt(squareElement.dataset.row),
                         col: parseInt(squareElement.dataset.col),
                     };
-                    handleMove(sourceSquare, targetSquare);
+                    attemptMove(sourceSquare, targetSquare);
                 }
             });
 
@@ -400,6 +559,7 @@ const renderBoard = () => {
         });
     });
 
+    // Apply legal move highlights if a piece is selected
     if (selectedSquare) {
         highlightValidMoves(selectedSquare);
     }
@@ -413,71 +573,6 @@ const renderBoard = () => {
 
     updateTurnIndicators();
     updateCapturedPieces();
-};
-
-// ─── Algebraic Notation Helpers ──────────────────────────────
-function toAlgebraic(row, col) {
-    return `${String.fromCharCode(97 + col)}${8 - row}`;
-}
-
-// ─── Piece Selection (Click-to-Move) ─────────────────────────
-const selectPiece = (row, col) => {
-    if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) {
-        selectedSquare = null;
-        renderBoard();
-        return;
-    }
-    selectedSquare = { row, col };
-    renderBoard();
-};
-
-// ─── Valid Move Highlighting ─────────────────────────────────
-const highlightValidMoves = (square) => {
-    const from = toAlgebraic(square.row, square.col);
-    const moves = chess.moves({ square: from, verbose: true });
-
-    const selectedEl = boardElement.querySelector(
-        `[data-row="${square.row}"][data-col="${square.col}"]`
-    );
-    if (selectedEl) selectedEl.classList.add("selected");
-
-    moves.forEach(move => {
-        const toCol = move.to.charCodeAt(0) - 97;
-        const toRow = 8 - parseInt(move.to[1]);
-        const targetEl = boardElement.querySelector(
-            `[data-row="${toRow}"][data-col="${toCol}"]`
-        );
-
-        if (targetEl) {
-            if (move.captured) {
-                const ring = document.createElement("div");
-                ring.classList.add("valid-capture-ring");
-                targetEl.appendChild(ring);
-            } else {
-                const dot = document.createElement("div");
-                dot.classList.add("valid-move-dot");
-                targetEl.appendChild(dot);
-            }
-        }
-    });
-};
-
-// ─── Handle Move ──────────────────────────────────────────────
-const handleMove = (source, target) => {
-    const from = toAlgebraic(source.row, source.col);
-    const to = toAlgebraic(target.row, target.col);
-
-    const piece = chess.get(from);
-    const isPromotion = piece &&
-        piece.type === "p" &&
-        ((piece.color === "w" && target.row === 0) ||
-         (piece.color === "b" && target.row === 7));
-
-    const move = { from, to };
-    if (isPromotion) move.promotion = "q";
-
-    socket.emit("move", move);
-    selectedSquare = null;
 };
 
 // ─── Player Info & Roles UI ──────────────────────────────────
@@ -653,6 +748,8 @@ btnDeclineDraw.addEventListener("click", () => {
 socket.on("gameState", (state) => {
     chess.load(state.fen);
     lastMove = null;
+    selectedSquare = null;
+    currentLegalMoves = [];
     if (state.history && state.history.length > 0) {
         const last = state.history[state.history.length - 1];
         lastMove = { from: last.from, to: last.to };
@@ -669,6 +766,8 @@ socket.on("gameState", (state) => {
 // Role assignment
 socket.on("playerRole", (role) => {
     playerRole = role;
+    selectedSquare = null;
+    currentLegalMoves = [];
     updatePlayerInfo();
     renderBoard();
     showToast(`You are playing as ${role === "w" ? "White" : "Black"}`);
@@ -676,6 +775,8 @@ socket.on("playerRole", (role) => {
 
 socket.on("spectatorRole", () => {
     playerRole = null;
+    selectedSquare = null;
+    currentLegalMoves = [];
     updatePlayerInfo();
     renderBoard();
     showToast("You are spectating this game");
@@ -702,6 +803,7 @@ socket.on("move", (moveData) => {
     });
     lastMove = { from: moveData.from, to: moveData.to };
     selectedSquare = null;
+    currentLegalMoves = [];
 
     if (moveData.clocks) {
         clocks.w = moveData.clocks.w;
@@ -742,10 +844,15 @@ socket.on("chatMessage", (msg) => {
 // Invalid move
 socket.on("invalidMove", () => {
     showToast("Invalid move!");
+    selectedSquare = null;
+    currentLegalMoves = [];
+    renderBoard();
 });
 
 // Game over
 socket.on("gameOver", (data) => {
+    selectedSquare = null;
+    currentLegalMoves = [];
     showGameOverModal(data);
     renderBoard();
 });
@@ -755,6 +862,7 @@ socket.on("newGame", (state) => {
     isGameOver = false;
     lastMove = null;
     selectedSquare = null;
+    currentLegalMoves = [];
     chess.load(state.fen);
     clocks = { w: 600, b: 600 };
     updateClockDisplays();

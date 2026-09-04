@@ -26,7 +26,13 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 
 ### 🎮 Gameplay & Chess Mechanics
 - **Full Chess Rules Engine** — Powered by `chess.js` on both client and server
-- **Server-Side Move Validation** — All moves validated server-side to prevent cheating
+- **Server-Side Move Validation** — All moves validated server-side to prevent cheating (server remains ultimate authority)
+- **Phase 2 Legal Move Experience** — Complete dynamic visual feedback powered by `chess.js`:
+  - **Selected Piece:** High-contrast illuminated square highlight with subtle inner glow
+  - **Legal Empty Destinations:** Subtle circular dots with interactive hover scaling
+  - **Legal Captures:** High-visibility capture rings framing enemy pieces (handles standard captures & en passant)
+  - **Comprehensive Rules Respect:** Full support for Turn, Check, Checkmate, Absolute Pins, King Safety, Castling (O-O / O-O-O), En Passant, and Pawn Promotion
+  - **Intuitive Interaction Flow:** Click to select, click again to deselect, click another own piece to switch selection instantly, click legal target to move, click illegal square for subtle feedback
 - **10-Minute Rapid Chess Clocks** — Real-time countdown clocks synchronized across players with timeout detection and low-time flash
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
@@ -149,9 +155,9 @@ newGame                      gameState {fen, turn, isCheck, history}
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| **Phase 1** | Professional UI, SVG pieces, sounds, game-over, resign, new game | ✅ Complete |
-| **Phase 2** | Chess clocks, move history sidebar, captured pieces, draw offers, pawn promotion UI | 🔜 Planned |
-| **Phase 3** | Game rooms, lobby, authentication, matchmaking, private games | 📋 Planned |
+| **Phase 1** | Professional UI, Complete Desktop Layout (Navbar, Clocks, Moves, Captured, Chat, Controls) | ✅ Complete |
+| **Phase 2** | Chess Move Experience (Dynamic Legal Moves, Selection Switching, Dots, Rings, Pins, Castling, En Passant) | ✅ Complete |
+| **Phase 3** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
 | **Phase 4** | ELO ratings, leaderboards, game history, player profiles | 📋 Planned |
 | **Phase 5** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 | **Phase 6** | Chess puzzles, responsive mobile app, PWA | 📋 Planned |

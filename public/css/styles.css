@@ -565,39 +565,75 @@ html, body {
 
 .square.selected {
     background-color: var(--hl-selected) !important;
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 
 .square.in-check {
-    background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.7) 0%, rgba(220, 38, 38, 0.4) 45%, transparent 75%) !important;
+    background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.75) 0%, rgba(220, 38, 38, 0.45) 45%, transparent 75%) !important;
+}
+
+.square.has-valid-move,
+.square.has-valid-capture {
+    cursor: pointer !important;
 }
 
 /* Move Indicator Markers */
 .valid-move-dot {
     position: absolute;
-    width: 30%;
-    height: 30%;
+    width: 26%;
+    height: 26%;
     border-radius: 50%;
     background-color: var(--hl-valid-dot);
     pointer-events: none;
     z-index: 5;
-    animation: fadeIn 0.15s ease-out;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
+    animation: dotFadeIn 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.square.has-valid-move:hover .valid-move-dot {
+    transform: scale(1.35);
+    background-color: rgba(16, 185, 129, 0.5);
 }
 
 .valid-capture-ring {
     position: absolute;
-    width: 82%;
-    height: 82%;
+    width: 86%;
+    height: 86%;
     border-radius: 50%;
     border: 4px solid var(--hl-capture-ring);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
     pointer-events: none;
     z-index: 5;
     box-sizing: border-box;
-    animation: fadeIn 0.15s ease-out;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s ease, background-color 0.15s ease;
+    animation: ringFadeIn 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.6); }
+.square.has-valid-capture:hover .valid-capture-ring {
+    transform: scale(1.06);
+    border-color: rgba(239, 68, 68, 0.95);
+    background-color: rgba(239, 68, 68, 0.16);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes dotFadeIn {
+    from { opacity: 0; transform: scale(0.3); }
     to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ringFadeIn {
+    from { opacity: 0; transform: scale(0.65); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes invalidFeedback {
+    0% { transform: scale(1); }
+    35% { transform: scale(0.96); filter: brightness(0.88); }
+    100% { transform: scale(1); filter: brightness(1); }
+}
+
+.square.invalid-feedback {
+    animation: invalidFeedback 0.22s ease-out;
 }
 
 /* Chess Pieces */
