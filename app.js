@@ -20,10 +20,25 @@ let players = {
     white: null,
     black: null,
 };
+let playerSessions = {
+    white: null, // { sessionToken, socketId, connected: true, disconnectedAt: null, disconnectTimeout: null }
+    black: null  // { sessionToken, socketId, connected: true, disconnectedAt: null, disconnectTimeout: null }
+};
 let playerProfiles = {
     white: { name: "Magnus_G", rating: 1540, avatarColor: "#3b82f6" },
     black: { name: "Hikaru_K", rating: 1515, avatarColor: "#10b981" }
 };
+
+function getPlayersSnapshot() {
+    return {
+        white: playerSessions.white
+            ? { ...playerProfiles.white, connected: playerSessions.white.connected }
+            : null,
+        black: playerSessions.black
+            ? { ...playerProfiles.black, connected: playerSessions.black.connected }
+            : null,
+    };
+}
 
 // ─── Supported Time Controls ──────────────────────────────────
 const TIME_CONTROLS = {
@@ -216,10 +231,7 @@ function getGameState() {
             key: currentTimeControlKey,
             ...TIME_CONTROLS[currentTimeControlKey]
         },
-        players: {
-            white: players.white ? playerProfiles.white : null,
-            black: players.black ? playerProfiles.black : null,
-        }
+        players: getPlayersSnapshot()
     };
 }
 
@@ -227,77 +239,203 @@ function getGameState() {
 io.on("connection", function (uniquesocket) {
     console.log(`[connect] ${uniquesocket.id}`);
 
-    // Assign role
+    const sessionToken = uniquesocket.handshake.auth?.sessionToken || uniquesocket.handshake.query?.sessionToken;
     let assignedRole = null;
-    if (!players.white) {
-        players.white = uniquesocket.id;
-        assignedRole = "w";
-        uniquesocket.emit("playerRole", "w");
-    } else if (!players.black) {
-        players.black = uniquesocket.id;
-        assignedRole = "b";
-        uniquesocket.emit("playerRole", "b");
-    } else {
-        uniquesocket.emit("spectatorRole");
+    let isReconnection = false;
+
+    function handlePlayerIdentification(token) {
+        if (!token) return false;
+
+        // Check if token matches White player session
+        if (playerSessions.white && playerSessions.white.sessionToken === token) {
+            assignedRole = "w";
+            isReconnection = true;
+            if (playerSessions.white.disconnectTimeout) {
+                clearTimeout(playerSessions.white.disconnectTimeout);
+                playerSessions.white.disconnectTimeout = null;
+            }
+            playerSessions.white.socketId = uniquesocket.id;
+            playerSessions.white.connected = true;
+            playerSessions.white.disconnectedAt = null;
+            players.white = uniquesocket.id;
+
+            uniquesocket.emit("playerRole", "w");
+            uniquesocket.emit("reconnected", { role: "w", roleName: "White" });
+            uniquesocket.emit("gameState", getGameState());
+            uniquesocket.emit("chatHistory", chatMessages.slice(-30));
+
+            io.emit("playersUpdate", getPlayersSnapshot());
+            io.emit("playerReconnected", { role: "w", roleName: "White" });
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: "White reconnected to the match.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            console.log(`[reconnect] White reconnected with socket ${uniquesocket.id}`);
+            return true;
+        }
+
+        // Check if token matches Black player session
+        if (playerSessions.black && playerSessions.black.sessionToken === token) {
+            assignedRole = "b";
+            isReconnection = true;
+            if (playerSessions.black.disconnectTimeout) {
+                clearTimeout(playerSessions.black.disconnectTimeout);
+                playerSessions.black.disconnectTimeout = null;
+            }
+            playerSessions.black.socketId = uniquesocket.id;
+            playerSessions.black.connected = true;
+            playerSessions.black.disconnectedAt = null;
+            players.black = uniquesocket.id;
+
+            uniquesocket.emit("playerRole", "b");
+            uniquesocket.emit("reconnected", { role: "b", roleName: "Black" });
+            uniquesocket.emit("gameState", getGameState());
+            uniquesocket.emit("chatHistory", chatMessages.slice(-30));
+
+            io.emit("playersUpdate", getPlayersSnapshot());
+            io.emit("playerReconnected", { role: "b", roleName: "Black" });
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: "Black reconnected to the match.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            console.log(`[reconnect] Black reconnected with socket ${uniquesocket.id}`);
+            return true;
+        }
+
+        return false;
     }
 
-    // Broadcast updated player slots to everyone
-    io.emit("playersUpdate", {
-        white: players.white ? playerProfiles.white : null,
-        black: players.black ? playerProfiles.black : null,
+    // Try reconnecting via handshake token
+    const reconnected = handlePlayerIdentification(sessionToken);
+
+    if (!reconnected) {
+        // Seat new player or spectator
+        if (!playerSessions.white) {
+            assignedRole = "w";
+            playerSessions.white = {
+                sessionToken: sessionToken || ("sess_" + uniquesocket.id),
+                socketId: uniquesocket.id,
+                connected: true,
+                disconnectedAt: null,
+                disconnectTimeout: null
+            };
+            players.white = uniquesocket.id;
+            uniquesocket.emit("playerRole", "w");
+        } else if (!playerSessions.black) {
+            assignedRole = "b";
+            playerSessions.black = {
+                sessionToken: sessionToken || ("sess_" + uniquesocket.id),
+                socketId: uniquesocket.id,
+                connected: true,
+                disconnectedAt: null,
+                disconnectTimeout: null
+            };
+            players.black = uniquesocket.id;
+            uniquesocket.emit("playerRole", "b");
+        } else {
+            uniquesocket.emit("spectatorRole");
+        }
+
+        // Broadcast updated player slots to everyone
+        io.emit("playersUpdate", getPlayersSnapshot());
+
+        // Send current game state and chat history
+        uniquesocket.emit("gameState", getGameState());
+        uniquesocket.emit("chatHistory", chatMessages.slice(-30));
+
+        // System announcement for new join
+        const roleText = assignedRole === "w" ? "White (Magnus_G)" : assignedRole === "b" ? "Black (Hikaru_K)" : "Spectator";
+        const joinMsg = {
+            sender: "System",
+            role: "sys",
+            text: `New user joined as ${roleText}`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        io.emit("chatMessage", joinMsg);
+    }
+
+    // Explicit identification endpoint for client re-identification
+    uniquesocket.on("identify", (data) => {
+        if (data && data.sessionToken) {
+            handlePlayerIdentification(data.sessionToken);
+        }
     });
-
-    // Send current game state immediately
-    uniquesocket.emit("gameState", getGameState());
-    uniquesocket.emit("chatHistory", chatMessages.slice(-30));
-
-    // Send system announcement
-    const roleText = assignedRole === "w" ? "White (Magnus_G)" : assignedRole === "b" ? "Black (Hikaru_K)" : "Spectator";
-    const joinMsg = {
-        sender: "System",
-        role: "sys",
-        text: `New user joined as ${roleText}`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    io.emit("chatMessage", joinMsg);
 
     // ── Disconnect ────────────────────────────────────────────
     uniquesocket.on("disconnect", function () {
         console.log(`[disconnect] ${uniquesocket.id}`);
         let leftRole = null;
-        if (uniquesocket.id === players.white) {
-            players.white = null;
+        let session = null;
+        let roleKey = null;
+
+        if (playerSessions.white && playerSessions.white.socketId === uniquesocket.id) {
             leftRole = "White";
-        } else if (uniquesocket.id === players.black) {
-            players.black = null;
+            session = playerSessions.white;
+            roleKey = "white";
+        } else if (playerSessions.black && playerSessions.black.socketId === uniquesocket.id) {
             leftRole = "Black";
+            session = playerSessions.black;
+            roleKey = "black";
         }
 
-        if (leftRole) {
-            io.emit("playersUpdate", {
-                white: players.white ? playerProfiles.white : null,
-                black: players.black ? playerProfiles.black : null,
-            });
+        if (leftRole && session) {
+            session.connected = false;
+            session.disconnectedAt = Date.now();
+            const roleChar = leftRole === "White" ? "w" : "b";
+            const opponentChar = leftRole === "White" ? "b" : "w";
+            const opponentRoleName = leftRole === "White" ? "Black" : "White";
+
+            // Broadcast disconnected state to clients
+            io.emit("playersUpdate", getPlayersSnapshot());
+            io.emit("playerDisconnected", { role: roleChar, roleName: leftRole });
             io.emit("chatMessage", {
                 sender: "System",
                 role: "sys",
-                text: `${leftRole} disconnected`,
+                text: `${leftRole} disconnected. Waiting for reconnection...`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
 
-            // If game hasn't started (0 moves played), abort match
-            if (!isGameFinished() && chess.history().length === 0) {
-                isGameOverState = true;
-                stopClock();
-                io.emit("gameOver", {
-                    gameOver: true,
-                    type: "aborted",
-                    winner: null,
-                    message: `Game aborted — ${leftRole} disconnected before the first move.`
-                });
-            } else if (!isGameFinished()) {
-                io.emit("playerDisconnected", { role: leftRole === "White" ? "w" : "b", roleName: leftRole });
+            // Production Reconnection Grace Period:
+            // If match hasn't started (0 moves): 20 seconds grace before abort
+            // If match is active (>0 moves): 60 seconds grace before forfeit by abandonment
+            const movesCount = chess.history().length;
+            const graceMs = (!isGameFinished() && movesCount === 0) ? 20000 : 60000;
+
+            if (session.disconnectTimeout) {
+                clearTimeout(session.disconnectTimeout);
             }
+
+            session.disconnectTimeout = setTimeout(() => {
+                if (!session.connected) {
+                    console.log(`[grace timeout] ${leftRole} failed to reconnect within grace period`);
+                    if (!isGameFinished()) {
+                        isGameOverState = true;
+                        stopClock();
+                        if (movesCount === 0) {
+                            io.emit("gameOver", {
+                                gameOver: true,
+                                type: "aborted",
+                                winner: null,
+                                message: `Game aborted — ${leftRole} disconnected before the first move.`
+                            });
+                        } else {
+                            io.emit("gameOver", {
+                                gameOver: true,
+                                type: "abandonment",
+                                winner: opponentChar,
+                                message: `${opponentRoleName} wins — ${leftRole} abandoned the game!`
+                            });
+                        }
+                    }
+                    playerSessions[roleKey] = null;
+                    players[roleKey] = null;
+                    io.emit("playersUpdate", getPlayersSnapshot());
+                }
+            }, graceMs);
         }
     });
 
@@ -546,8 +684,12 @@ io.on("connection", function (uniquesocket) {
         }
 
         // Vacate seat
-        if (leftColor === "w") players.white = null;
-        else players.black = null;
+        const roleKey = leftColor === "w" ? "white" : "black";
+        if (playerSessions[roleKey] && playerSessions[roleKey].disconnectTimeout) {
+            clearTimeout(playerSessions[roleKey].disconnectTimeout);
+        }
+        playerSessions[roleKey] = null;
+        players[roleKey] = null;
 
         drawOffer = null;
         rematchOffer = null;
@@ -557,10 +699,7 @@ io.on("connection", function (uniquesocket) {
         uniquesocket.emit("leftGameSuccess");
 
         // Broadcast updated seats
-        io.emit("playersUpdate", {
-            white: players.white ? playerProfiles.white : null,
-            black: players.black ? playerProfiles.black : null,
-        });
+        io.emit("playersUpdate", getPlayersSnapshot());
 
         io.emit("chatMessage", {
             sender: "System",
@@ -606,10 +745,13 @@ io.on("connection", function (uniquesocket) {
         if (!isGameFinished() || !rematchOffer || rematchOffer === acceptColor) return;
 
         // Swap seats (standard rematch convention: colors switch)
-        const oldWhite = players.white;
-        const oldBlack = players.black;
-        players.white = oldBlack;
-        players.black = oldWhite;
+        const oldWhiteSession = playerSessions.white;
+        const oldBlackSession = playerSessions.black;
+        playerSessions.white = oldBlackSession;
+        playerSessions.black = oldWhiteSession;
+
+        players.white = playerSessions.white ? playerSessions.white.socketId : null;
+        players.black = playerSessions.black ? playerSessions.black.socketId : null;
 
         // Also swap profiles for player bar display
         const tempProf = playerProfiles.white;
@@ -625,10 +767,7 @@ io.on("connection", function (uniquesocket) {
         if (players.white) io.to(players.white).emit("playerRole", "w");
         if (players.black) io.to(players.black).emit("playerRole", "b");
 
-        io.emit("playersUpdate", {
-            white: players.white ? playerProfiles.white : null,
-            black: players.black ? playerProfiles.black : null,
-        });
+        io.emit("playersUpdate", getPlayersSnapshot());
 
         io.emit("newGame", getGameState());
         io.emit("chatMessage", {

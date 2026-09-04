@@ -1,8 +1,24 @@
-/* ═══════════════════════════════════════════════════════════════
-   ChessArena — Production Client Game Engine
-   ═══════════════════════════════════════════════════════════════ */
+// ─── Session Identity & Persistent Reconnection (Phase 8) ──────
+function getOrCreateSessionToken() {
+    let token = localStorage.getItem("chess_session_token");
+    if (!token) {
+        token = "sess_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now().toString(36);
+        localStorage.setItem("chess_session_token", token);
+    }
+    return token;
+}
 
-const socket = io();
+const sessionToken = getOrCreateSessionToken();
+const socket = io({
+    auth: {
+        sessionToken: sessionToken
+    },
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 3000,
+    timeout: 15000
+});
 const chess = new Chess();
 const boardElement = document.getElementById("chessboard");
 
@@ -45,6 +61,8 @@ const opponentLabel     = document.getElementById("opponentLabel");
 const playerLabel       = document.getElementById("playerLabel");
 const opponentAvatarText= document.getElementById("opponentAvatarText");
 const playerAvatarText  = document.getElementById("playerAvatarText");
+const opponentOnlineDot = document.getElementById("opponentOnlineDot");
+const playerOnlineDot   = document.getElementById("playerOnlineDot");
 const opponentClock     = document.getElementById("opponentClock");
 const playerClock       = document.getElementById("playerClock");
 const opponentIncrement = document.getElementById("opponentIncrement");
@@ -1014,6 +1032,39 @@ function updatePlayerInfo(playersData) {
         btnOfferDraw.disabled = true;
     }
 
+    // Update connection status indicators on player strips (Phase 8)
+    const isWhiteConnected = myWhite.connected !== false;
+    const isBlackConnected = myBlack.connected !== false;
+
+    if (playerRole === "w") {
+        if (playerOnlineDot) {
+            playerOnlineDot.classList.toggle("offline", !isWhiteConnected);
+            playerOnlineDot.title = isWhiteConnected ? "Online" : "Disconnected";
+        }
+        if (opponentOnlineDot) {
+            opponentOnlineDot.classList.toggle("offline", !isBlackConnected);
+            opponentOnlineDot.title = isBlackConnected ? "Online" : "Disconnected";
+        }
+    } else if (playerRole === "b") {
+        if (playerOnlineDot) {
+            playerOnlineDot.classList.toggle("offline", !isBlackConnected);
+            playerOnlineDot.title = isBlackConnected ? "Online" : "Disconnected";
+        }
+        if (opponentOnlineDot) {
+            opponentOnlineDot.classList.toggle("offline", !isWhiteConnected);
+            opponentOnlineDot.title = isWhiteConnected ? "Online" : "Disconnected";
+        }
+    } else {
+        if (playerOnlineDot) {
+            playerOnlineDot.classList.toggle("offline", !isWhiteConnected);
+            playerOnlineDot.title = isWhiteConnected ? "White Online" : "White Disconnected";
+        }
+        if (opponentOnlineDot) {
+            opponentOnlineDot.classList.toggle("offline", !isBlackConnected);
+            opponentOnlineDot.title = isBlackConnected ? "Black Online" : "Black Disconnected";
+        }
+    }
+
     updateClockDisplays();
     updateTurnIndicators();
 }
@@ -1329,6 +1380,7 @@ btnModalLeave.addEventListener("click", handleLeavePrompt);
 btnConfirmLeave.addEventListener("click", () => {
     closeModal(leaveGameConfirmModal);
     closeModal(gameOverModal);
+    localStorage.removeItem("chess_session_token");
     socket.emit("leaveGame");
 });
 
@@ -1568,12 +1620,29 @@ socket.on("newGame", (state) => {
     playSound("notify");
 });
 
-// Connection state
+// Connection state & Real-time Reconnection (Phase 8)
 socket.on("connect", () => {
     const dot = document.getElementById("connectionDot");
     const text = document.getElementById("connectionText");
     if (dot) dot.style.background = "var(--accent-emerald)";
     if (text) text.textContent = "Connected";
+
+    // Re-identify with persistent session token
+    socket.emit("identify", { sessionToken });
+});
+
+socket.on("reconnected", (data) => {
+    showToast(`Reconnected to match as ${data.role === "w" ? "White" : "Black"}! Synchronized.`, 3000);
+    const dot = document.getElementById("connectionDot");
+    const text = document.getElementById("connectionText");
+    if (dot) dot.style.background = "var(--accent-emerald)";
+    if (text) text.textContent = "Connected";
+    updateTurnIndicators();
+});
+
+socket.on("playerReconnected", (data) => {
+    showToast(`${data.roleName} has reconnected to the match!`, 3000);
+    updateTurnIndicators();
 });
 
 socket.on("disconnect", () => {
@@ -1581,6 +1650,7 @@ socket.on("disconnect", () => {
     const text = document.getElementById("connectionText");
     if (dot) dot.style.background = "var(--accent-danger)";
     if (text) text.textContent = "Reconnecting...";
+    showToast("Connection lost. Reconnecting to game...", 2500);
 });
 
 // ─── Initial Render & Start Local Clock Ticker ────────────────

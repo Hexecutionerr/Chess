@@ -362,6 +362,13 @@ html, body {
     background: var(--accent-emerald);
     border: 2px solid var(--bg-surface);
     border-radius: 50%;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.online-indicator.offline {
+    background: var(--accent-danger) !important;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    animation: livePulse 1.2s infinite;
 }
 
 .player-text {

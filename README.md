@@ -78,6 +78,7 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 - **Live Chess Clocks** — High-legibility monospaced digital timers with active glowing states
 - **Material Evaluation & Captured Trays** — Visual trays of captured pieces with real-time material lead calculations (+1, +2, etc.)
 - **Comprehensive 12 Game States & UI Representations** — Real-time state machine supporting `WAITING`, `STARTING`, `ACTIVE`, `CHECK`, `CHECKMATE`, `DRAW`, `STALEMATE`, `TIMEOUT`, `RESIGNED`, `ABORTED`, `DISCONNECTED`, and `FINISHED`
+- **Production Real-Time Reconnection (Phase 8)** — Persistent session-based reconnection (`localStorage` token + socket auth), preserving player roles, board state, authoritative clocks, and active games with zero duplication or resets
 - **Dynamic Game Over Modal & Action Flow** — Result header (`YOU WON! 🏆` / `YOU LOST` / `DRAW 🤝` / `GAME ABORTED 🚫`), game details, Rematch, New Game, Review Board, and Leave Seat actions
 - **Algebraic Move Notation Panel** — Two-column moves table (`#`, `White`, `Black`) with active-move highlighting, history navigation buttons, and auto-scroll
 - **Action Control Toolbar** — Integrated Draw, Resign, Flip, and New Game controls
@@ -172,7 +173,9 @@ offerDraw / acceptDraw       gameState {fen, turn, isCheck, history, players, cl
 offerRematch / acceptRematch playersUpdate {white, black}
 leaveGame                    move {from, to, san, captured, clocks, increment}
 newGame                      playerDisconnected {role, roleName}
-setTimeControl               gameOver {type, winner, message}
+setTimeControl               playerReconnected {role, roleName}
+identify {sessionToken}      reconnected {role, roleName}
+                             gameOver {type, winner, message}
                              newGame {fen, turn, ...}
 ```
 
@@ -189,9 +192,10 @@ setTimeControl               gameOver {type, winner, message}
 | **Phase 5** | Professional Game Controls (Offer/Accept/Decline Draw, Resign Modal, Leave Game Forfeit, Rematch with Color Swap, Reset Safeguards) | ✅ Complete |
 | **Phase 6** | Captured Pieces & Material Advantage (Visual Piece Trays, Subtle Differential +1/+2, Historical Scrubber Sync) | ✅ Complete |
 | **Phase 7** | Comprehensive Game States (Waiting, Starting, Active, Check, Checkmate, Draw, Stalemate, Timeout, Resigned, Aborted, Disconnected, Finished) | ✅ Complete |
-| **Phase 8** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
-| **Phase 9** | ELO ratings, leaderboards, player profiles | 📋 Planned |
-| **Phase 10** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 8** | Real-Time Reconnection (Persistent Session Tokens, Preserved Game State & Clocks, Resynchronization, Anti-Duplicate Architecture) | ✅ Complete |
+| **Phase 9** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 10** | ELO ratings, leaderboards, player profiles | 📋 Planned |
+| **Phase 11** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 
