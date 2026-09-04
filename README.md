@@ -179,7 +179,12 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 
 ### 🌐 Real-Time Multiplayer & Social
 - **WebSocket Architecture** — Instant synchronization via Socket.IO
-- **Live In-Game Chat** — Real-time communication channel with role badges and system activity logs
+- **Phase 16 Production Game Chat** — Real-time in-game communication with security & anti-abuse:
+  - **Message Schema:** Full structured messages including verified `username`, `message` text, and ISO `timestamp` + formatted clock time
+  - **Quick Messages Toolbar:** Instant one-click sportsmanship pills (`🍀 Good luck!`, `🎉 Have fun!`, `👏 Well played!`, `🤝 Thanks!`)
+  - **Strict Anti-Impersonation:** Server-authoritative sender identity resolution preventing arbitrary socket clients from spoofing White, Black, or other users
+  - **Anti-Spam & Flood Rate Limiting:** Sliding-window rate limiting (max 4 msgs/5s, min 400ms cooldown) with offender toast warnings
+  - **Duplicate Suppression & Content Normalization:** Automatic rejection of repetitive identical message spam and condensation of character-stretching floods
 - **Dynamic Role Assignment** — 1st player = White, 2nd = Black, 3rd+ = Spectators
 - **Player Disconnect Handling** — Seats freed automatically on disconnect with chat announcements
 - **Live Board Sync** — Spectators and reconnecting players receive current game state and move history immediately
@@ -320,7 +325,8 @@ joinPrivateGame {roomId, token}   privateGameCreated {roomId, inviteUrl, role, t
 | **Phase 13** | Game Database (MongoDB Persistence for Active & Completed Games, 15 Model Fields, Move History, PGN, Proper Indexes, REST APIs) | ✅ Complete |
 | **Phase 14** | ELO Rating (Win/Loss/Draw Updates, Rating Categories, Casual/Aborted/Invalid Game Prevention, Live UI Badges) | ✅ Complete |
 | **Phase 15** | Leaderboards & Ranking Ladders (Global/Weekly/Monthly Filters, Categories, Podium Spotlight, Sticky Standings) | ✅ Complete |
-| **Phase 16** | AI Opponent (Stockfish Integration), Game Review & Deep Analysis Board | 📋 Planned |
+| **Phase 16** | Real-Time Game Chat (Structured Messages, Quick Messages Toolbar, Anti-Impersonation & Anti-Spam Protection) | ✅ Complete |
+| **Phase 17** | AI Opponent (Stockfish Integration), Game Review & Deep Analysis Board | 📋 Planned |
 
 ---
 

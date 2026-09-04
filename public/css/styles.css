@@ -3859,4 +3859,82 @@ html, body {
     }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 16: GAME CHAT & QUICK MESSAGES
+   ═══════════════════════════════════════════════════════════════ */
+.quick-messages-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+}
+
+.quick-messages-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.btn-quick-msg {
+    padding: 3px 9px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.btn-quick-msg:hover {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: #3b82f6;
+    color: #93c5fd;
+    transform: translateY(-1px);
+}
+
+.btn-quick-msg:active {
+    transform: translateY(0);
+}
+
+/* Chat Timestamp & Badges */
+.chat-time {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    margin-left: 6px;
+}
+
+.chat-role-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 4px;
+    text-transform: uppercase;
+}
+
+.role-badge-white {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+}
+
+.role-badge-black {
+    background: rgba(100, 116, 139, 0.4);
+    color: #cbd5e1;
+}
+
+.role-badge-spectator {
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-muted);
+}
+
+
 

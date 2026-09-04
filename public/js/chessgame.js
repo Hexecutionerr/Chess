@@ -1124,28 +1124,53 @@ function showToast(message, duration = 2500) {
     setTimeout(() => toastEl.classList.remove("visible"), duration);
 }
 
-// ─── Chat Functions ──────────────────────────────────────────
+// ─── Chat Functions (Phase 16) ───────────────────────────────
 function appendChatMessage(msg) {
+    if (!chatLog || !msg) return;
     const msgEl = document.createElement("div");
-    msgEl.className = `chat-msg msg-${msg.role}`;
+    const role = msg.role || "spectator";
+    msgEl.className = `chat-msg msg-${role}`;
 
     const headerEl = document.createElement("div");
     headerEl.className = "chat-msg-header";
 
     const senderEl = document.createElement("span");
-    senderEl.className = `chat-sender sender-${msg.role}`;
-    senderEl.textContent = msg.sender;
+    senderEl.className = `chat-sender sender-${role}`;
+    const displayName = msg.username || msg.sender || "Player";
+    senderEl.textContent = displayName;
+
+    if (role === "white") {
+        const badge = document.createElement("span");
+        badge.className = "chat-role-badge role-badge-white";
+        badge.textContent = "White";
+        senderEl.appendChild(badge);
+    } else if (role === "black") {
+        const badge = document.createElement("span");
+        badge.className = "chat-role-badge role-badge-black";
+        badge.textContent = "Black";
+        senderEl.appendChild(badge);
+    } else if (role === "spectator") {
+        const badge = document.createElement("span");
+        badge.className = "chat-role-badge role-badge-spectator";
+        badge.textContent = "Spectator";
+        senderEl.appendChild(badge);
+    }
+
+    let timeText = msg.time;
+    if (!timeText && msg.timestamp) {
+        timeText = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 
     const timeEl = document.createElement("span");
     timeEl.className = "chat-time";
-    timeEl.textContent = msg.time || "";
+    timeEl.textContent = timeText || "";
 
     headerEl.appendChild(senderEl);
     headerEl.appendChild(timeEl);
 
     const bubbleEl = document.createElement("div");
     bubbleEl.className = "chat-bubble";
-    bubbleEl.textContent = msg.text;
+    bubbleEl.textContent = msg.message || msg.text || "";
 
     msgEl.appendChild(headerEl);
     msgEl.appendChild(bubbleEl);
@@ -1154,13 +1179,26 @@ function appendChatMessage(msg) {
     chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-chatForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const text = chatInput.value.trim();
-    if (text) {
-        socket.emit("chatMessage", text);
-        chatInput.value = "";
-    }
+if (chatForm) {
+    chatForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = (chatInput && chatInput.value) ? chatInput.value.trim() : "";
+        if (text) {
+            socket.emit("chatMessage", { message: text });
+            chatInput.value = "";
+        }
+    });
+}
+
+// Phase 16: Quick Message toolbar buttons
+const quickMsgButtons = document.querySelectorAll(".btn-quick-msg");
+quickMsgButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+        const msgText = btn.dataset.msg;
+        if (msgText) {
+            socket.emit("chatMessage", { message: msgText });
+        }
+    });
 });
 
 // ─── Modal Helpers ───────────────────────────────────────────
@@ -2443,6 +2481,11 @@ socket.on("unauthorizedAction", (data) => {
     showToast((data && data.message) ? data.message : "Unauthorized action: Spectators cannot move pieces.", 3000);
 });
 
+// Phase 16: Anti-Spam & Chat Warnings
+socket.on("chatWarning", (data) => {
+    showToast("⚠️ " + ((data && data.message) ? data.message : "Chat rate limit exceeded"), 3500);
+});
+
 // Connection state & Real-time Reconnection (Phase 8)
 socket.on("connect", () => {
     const dot = document.getElementById("connectionDot");
@@ -2450,8 +2493,8 @@ socket.on("connect", () => {
     if (dot) dot.style.background = "var(--accent-emerald)";
     if (text) text.textContent = "Connected";
 
-    // Re-identify with persistent session token
-    socket.emit("identify", { sessionToken });
+    // Re-identify with persistent session token and verified username (Phase 16)
+    socket.emit("identify", { sessionToken, username: currentUsername });
 
     // Phase 10: Auto-join if URL contains game ID or room param
     const urlParams = new URLSearchParams(window.location.search);

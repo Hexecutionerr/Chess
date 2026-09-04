@@ -491,9 +491,14 @@ io.on("connection", function (uniquesocket) {
 
     // Re-identification listener
     uniquesocket.on("identify", (data) => {
-        if (data && data.sessionToken) {
-            const currentR = getSocketRoom(uniquesocket);
-            handlePlayerIdentification(data.sessionToken, currentR);
+        if (data) {
+            if (data.username && typeof data.username === "string") {
+                uniquesocket.verifiedUsername = data.username.trim().slice(0, 25);
+            }
+            if (data.sessionToken) {
+                const currentR = getSocketRoom(uniquesocket);
+                handlePlayerIdentification(data.sessionToken, currentR);
+            }
         }
     });
 
@@ -1223,27 +1228,104 @@ io.on("connection", function (uniquesocket) {
         }
     });
 
-    // ── Chat Message ──────────────────────────────────────────
-    uniquesocket.on("chatMessage", (text) => {
-        const room = getSocketRoom(uniquesocket);
-        if (!room || !text || typeof text !== "string" || !text.trim()) return;
+    // ── Phase 16: Real-time Game Chat & Anti-Abuse ─────────────
+    uniquesocket.chatRateLimit = {
+        timestamps: [],
+        lastMessage: "",
+        repeatCount: 0
+    };
 
-        let senderName = "Spectator";
+    uniquesocket.on("chatMessage", (payload) => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
+        // Extract message string cleanly whether raw string or object payload
+        let rawText = "";
+        if (typeof payload === "string") {
+            rawText = payload;
+        } else if (payload && typeof payload.message === "string") {
+            rawText = payload.message;
+        } else if (payload && typeof payload.text === "string") {
+            rawText = payload.text;
+        }
+
+        let text = rawText.trim();
+        if (!text) return;
+
+        // 1. Anti-Spam Rate Limiting (max 4 messages per 5s, min 400ms cooldown)
+        const now = Date.now();
+        const rl = uniquesocket.chatRateLimit || { timestamps: [], lastMessage: "", repeatCount: 0 };
+        uniquesocket.chatRateLimit = rl;
+
+        // Clean timestamps older than 5s
+        rl.timestamps = rl.timestamps.filter(ts => now - ts < 5000);
+
+        if (rl.timestamps.length >= 4) {
+            uniquesocket.emit("chatWarning", {
+                reason: "rate_limit",
+                message: "Slow down! You are sending messages too quickly."
+            });
+            return;
+        }
+
+        if (rl.timestamps.length > 0 && (now - rl.timestamps[rl.timestamps.length - 1] < 400)) {
+            uniquesocket.emit("chatWarning", {
+                reason: "too_fast",
+                message: "Please wait a moment before sending another message."
+            });
+            return;
+        }
+
+        // 2. Anti-Flooding Duplicate Message Check
+        if (text.toLowerCase() === (rl.lastMessage || "").toLowerCase()) {
+            rl.repeatCount = (rl.repeatCount || 0) + 1;
+            if (rl.repeatCount >= 2) {
+                uniquesocket.emit("chatWarning", {
+                    reason: "duplicate",
+                    message: "Please avoid repeating the same message."
+                });
+                return;
+            }
+        } else {
+            rl.lastMessage = text;
+            rl.repeatCount = 0;
+        }
+
+        // 3. Message Length & Character Flooding Normalization
+        text = text.slice(0, 200);
+        // Collapse excessive repeated characters (e.g. "aaaaa..." > 5 repeats -> 3)
+        text = text.replace(/(.)\1{4,}/g, "$1$1$1");
+
+        // Record timestamp
+        rl.timestamps.push(now);
+
+        // 4. Server-Authoritative Identity & Anti-Impersonation
+        // The server strictly enforces identity; client-supplied username is ignored
+        let senderUsername = "Spectator";
         let senderRole = "spectator";
 
         if (uniquesocket.id === room.players.white) {
-            senderName = room.playerProfiles.white.name;
+            senderUsername = (room.playerProfiles && room.playerProfiles.white && room.playerProfiles.white.name) || "White";
             senderRole = "white";
         } else if (uniquesocket.id === room.players.black) {
-            senderName = room.playerProfiles.black.name;
+            senderUsername = (room.playerProfiles && room.playerProfiles.black && room.playerProfiles.black.name) || "Black";
             senderRole = "black";
+        } else {
+            senderUsername = uniquesocket.verifiedUsername || `Spectator_${uniquesocket.id.slice(0, 4)}`;
+            senderRole = "spectator";
         }
 
+        const timestampIso = new Date().toISOString();
+        const timeFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
         const messageObj = {
-            sender: senderName,
+            username: senderUsername,
+            message: text,
+            timestamp: timestampIso,
+            sender: senderUsername,
             role: senderRole,
-            text: text.trim().slice(0, 200),
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            text: text,
+            time: timeFormatted
         };
 
         room.chatMessages.push(messageObj);
