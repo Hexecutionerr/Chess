@@ -10,6 +10,12 @@ const io = socket(server);
 
 // ─── Game State ───────────────────────────────────────────────
 let chess = new Chess();
+let isGameOverState = false;
+
+function isGameFinished() {
+    return isGameOverState || chess.isGameOver();
+}
+
 let players = {
     white: null,
     black: null,
@@ -42,6 +48,7 @@ let clockState = {
 };
 let lastSyncTimestamp = 0;
 let drawOffer = null; // 'w' or 'b'
+let rematchOffer = null; // 'w' or 'b'
 let chatMessages = [];
 
 // ─── Authoritative Clock Management ───────────────────────────
@@ -83,7 +90,7 @@ function startClock() {
 
     // High frequency server check (100ms) to guarantee cheating prevention & exact timeout detection
     clockState.timer = setInterval(() => {
-        if (!clockState.active || chess.isGameOver()) {
+        if (!clockState.active || isGameFinished()) {
             stopClock();
             return;
         }
@@ -95,6 +102,7 @@ function startClock() {
 
         if (remaining <= 0) {
             clockState[currentTurn] = 0;
+            isGameOverState = true;
             stopClock();
             const winner = currentTurn === "w" ? "b" : "w";
 
@@ -201,7 +209,7 @@ function getGameState() {
         fen: chess.fen(),
         turn: chess.turn(),
         isCheck: chess.isCheck(),
-        isGameOver: chess.isGameOver(),
+        isGameOver: isGameFinished(),
         history: chess.history({ verbose: true }),
         clocks: getClockSnapshot(),
         timeControl: {
@@ -368,6 +376,7 @@ io.on("connection", function (uniquesocket) {
                 // Check for game-over
                 const gameOverResult = checkGameOver();
                 if (gameOverResult) {
+                    isGameOverState = true;
                     stopClock();
                     io.emit("gameOver", gameOverResult);
                 }
@@ -387,16 +396,28 @@ io.on("connection", function (uniquesocket) {
         else if (uniquesocket.id === players.black) resignColor = "b";
         else return; // Spectators can't resign
 
+        if (isGameFinished()) return; // Game already over
+
+        isGameOverState = true;
         stopClock();
         const winner = resignColor === "w" ? "b" : "w";
+        const resignerName = resignColor === "w" ? playerProfiles.white.name : playerProfiles.black.name;
+        
         io.emit("gameOver", {
             gameOver: true,
             type: "resignation",
             winner: winner,
             message:
                 resignColor === "w"
-                    ? "Black wins — White resigned!"
-                    : "White wins — Black resigned!",
+                    ? `Black wins — ${resignerName} resigned!`
+                    : `White wins — ${resignerName} resigned!`,
+        });
+
+        io.emit("chatMessage", {
+            sender: "System",
+            role: "sys",
+            text: `${resignerName} (${resignColor === "w" ? "White" : "Black"}) resigned`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
     });
 
@@ -407,8 +428,11 @@ io.on("connection", function (uniquesocket) {
         else if (uniquesocket.id === players.black) offerColor = "b";
         else return;
 
+        if (isGameFinished() || chess.history().length === 0) return;
+
         if (drawOffer && drawOffer !== offerColor) {
             // Both offered draw -> draw agreed
+            isGameOverState = true;
             stopClock();
             io.emit("gameOver", {
                 gameOver: true,
@@ -417,7 +441,7 @@ io.on("connection", function (uniquesocket) {
                 message: "Draw agreed by both players!"
             });
             drawOffer = null;
-        } else {
+        } else if (!drawOffer) {
             drawOffer = offerColor;
             const targetSocket = offerColor === "w" ? players.black : players.white;
             if (targetSocket) {
@@ -438,7 +462,10 @@ io.on("connection", function (uniquesocket) {
         else if (uniquesocket.id === players.black) acceptColor = "b";
         else return;
 
+        if (isGameFinished()) return;
+
         if (drawOffer && drawOffer !== acceptColor) {
+            isGameOverState = true;
             stopClock();
             io.emit("gameOver", {
                 gameOver: true,
@@ -447,6 +474,12 @@ io.on("connection", function (uniquesocket) {
                 message: "Draw agreed by both players!"
             });
             drawOffer = null;
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: "Draw accepted by mutual agreement",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
         }
     });
 
@@ -457,6 +490,145 @@ io.on("connection", function (uniquesocket) {
                 io.to(offerer).emit("drawDeclined");
             }
             drawOffer = null;
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: "Draw offer declined",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+    });
+
+    // ── Leave Game ────────────────────────────────────────────
+    uniquesocket.on("leaveGame", () => {
+        let leftColor = null;
+        if (uniquesocket.id === players.white) leftColor = "w";
+        else if (uniquesocket.id === players.black) leftColor = "b";
+        else return;
+
+        const leftRoleName = leftColor === "w" ? "White" : "Black";
+        const opponentColor = leftColor === "w" ? "b" : "w";
+        const opponentRoleName = opponentColor === "w" ? "White" : "Black";
+
+        // If game was actively underway, handle forfeit
+        if (!isGameFinished() && chess.history().length > 0) {
+            isGameOverState = true;
+            stopClock();
+            io.emit("gameOver", {
+                gameOver: true,
+                type: "abandonment",
+                winner: opponentColor,
+                message: `${opponentRoleName} wins — ${leftRoleName} left the game!`
+            });
+        }
+
+        // Vacate seat
+        if (leftColor === "w") players.white = null;
+        else players.black = null;
+
+        drawOffer = null;
+        rematchOffer = null;
+
+        // Transition leaver to spectator
+        uniquesocket.emit("spectatorRole");
+        uniquesocket.emit("leftGameSuccess");
+
+        // Broadcast updated seats
+        io.emit("playersUpdate", {
+            white: players.white ? playerProfiles.white : null,
+            black: players.black ? playerProfiles.black : null,
+        });
+
+        io.emit("chatMessage", {
+            sender: "System",
+            role: "sys",
+            text: `${leftRoleName} left their seat and is now spectating`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    });
+
+    // ── Rematch ───────────────────────────────────────────────
+    uniquesocket.on("offerRematch", () => {
+        let callerColor = null;
+        if (uniquesocket.id === players.white) callerColor = "w";
+        else if (uniquesocket.id === players.black) callerColor = "b";
+        else return;
+
+        // Rematch only valid when current game is finished
+        if (!isGameFinished()) return;
+
+        const targetSocket = callerColor === "w" ? players.black : players.white;
+        if (!targetSocket) {
+            uniquesocket.emit("rematchDeclined", { reason: "Opponent has left the game." });
+            return;
+        }
+
+        rematchOffer = callerColor;
+        io.to(targetSocket).emit("rematchOffered", { by: callerColor });
+
+        io.emit("chatMessage", {
+            sender: "System",
+            role: "sys",
+            text: `${callerColor === "w" ? "White" : "Black"} offered a rematch`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    });
+
+    uniquesocket.on("acceptRematch", () => {
+        let acceptColor = null;
+        if (uniquesocket.id === players.white) acceptColor = "w";
+        else if (uniquesocket.id === players.black) acceptColor = "b";
+        else return;
+
+        if (!isGameFinished() || !rematchOffer || rematchOffer === acceptColor) return;
+
+        // Swap seats (standard rematch convention: colors switch)
+        const oldWhite = players.white;
+        const oldBlack = players.black;
+        players.white = oldBlack;
+        players.black = oldWhite;
+
+        // Also swap profiles for player bar display
+        const tempProf = playerProfiles.white;
+        playerProfiles.white = playerProfiles.black;
+        playerProfiles.black = tempProf;
+
+        chess = new Chess();
+        isGameOverState = false;
+        resetClocks();
+        drawOffer = null;
+        rematchOffer = null;
+
+        if (players.white) io.to(players.white).emit("playerRole", "w");
+        if (players.black) io.to(players.black).emit("playerRole", "b");
+
+        io.emit("playersUpdate", {
+            white: players.white ? playerProfiles.white : null,
+            black: players.black ? playerProfiles.black : null,
+        });
+
+        io.emit("newGame", getGameState());
+        io.emit("chatMessage", {
+            sender: "System",
+            role: "sys",
+            text: `Rematch started with swapped colors! ${TIME_CONTROLS[currentTimeControlKey].label} on the clock.`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    });
+
+    uniquesocket.on("declineRematch", () => {
+        if (rematchOffer) {
+            const offerer = rematchOffer === "w" ? players.white : players.black;
+            if (offerer) {
+                io.to(offerer).emit("rematchDeclined");
+            }
+            rematchOffer = null;
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: "Rematch offer declined",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
         }
     });
 
@@ -491,14 +663,19 @@ io.on("connection", function (uniquesocket) {
     // ── New Game ──────────────────────────────────────────────
     uniquesocket.on("newGame", () => {
         if (
+            players.white &&
+            players.black &&
             uniquesocket.id !== players.white &&
             uniquesocket.id !== players.black
-        )
+        ) {
             return;
+        }
 
         chess = new Chess();
+        isGameOverState = false;
         resetClocks();
         drawOffer = null;
+        rematchOffer = null;
         io.emit("newGame", getGameState());
         io.emit("chatMessage", {
             sender: "System",

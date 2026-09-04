@@ -1121,7 +1121,7 @@ html, body {
 /* Toolbar Buttons */
 .game-action-toolbar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
     padding: 8px 12px;
     background: var(--bg-deep);
@@ -1151,8 +1151,9 @@ html, body {
 }
 
 .action-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: not-allowed;
+    filter: grayscale(0.5);
 }
 
 .btn-draw:hover:not(:disabled) {
@@ -1165,9 +1166,24 @@ html, body {
     border-color: rgba(239, 68, 68, 0.4);
 }
 
+.btn-rematch:hover:not(:disabled) {
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.4);
+}
+
 .btn-newgame-sm:hover:not(:disabled) {
     color: var(--accent-emerald);
     border-color: rgba(16, 185, 129, 0.4);
+}
+
+.btn-leave:hover:not(:disabled) {
+    color: var(--accent-danger);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.btn-flip:hover:not(:disabled) {
+    color: #a78bfa;
+    border-color: rgba(167, 139, 250, 0.4);
 }
 
 /* Chat Header */
@@ -1321,8 +1337,9 @@ html, body {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.78);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1341,33 +1358,50 @@ html, body {
     background: var(--bg-surface);
     border: 1px solid var(--border-medium);
     border-radius: var(--radius-xl);
-    padding: 32px 40px;
+    padding: 32px 36px;
     text-align: center;
     max-width: 420px;
     width: 90%;
-    box-shadow: var(--shadow-lg);
-    transform: translateY(16px);
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(0, 0, 0, 0.7);
+    transform: translateY(16px) scale(0.97);
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal-overlay.visible .modal {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
 }
 
 .modal-icon {
     font-size: 3rem;
     margin-bottom: 12px;
+    line-height: 1;
+}
+
+.modal-icon.text-danger {
+    color: var(--accent-danger);
+    filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.4));
+}
+
+.modal-icon.text-amber {
+    color: var(--accent-amber);
+    filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.4));
+}
+
+.modal-icon.text-blue {
+    color: #60a5fa;
+    filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.4));
 }
 
 .modal-title {
-    font-size: 1.5rem;
+    font-size: 1.45rem;
     font-weight: 800;
     color: var(--text-white);
     margin-bottom: 8px;
+    letter-spacing: -0.02em;
 }
 
 .modal-message {
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     color: var(--text-secondary);
     margin-bottom: 24px;
     line-height: 1.5;
@@ -1382,26 +1416,86 @@ html, body {
 .modal-actions.dual {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.modal-subactions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 14px;
+}
+
+.btn-subaction {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.btn-subaction:hover {
+    color: var(--text-white);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-subaction.text-danger:hover {
+    color: var(--accent-danger);
 }
 
 .btn {
-    padding: 10px 24px;
-    font-size: 0.9rem;
+    padding: 10px 20px;
+    font-size: 0.88rem;
     font-weight: 700;
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
-.btn-newgame, .btn-accept {
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-newgame, .btn-accept, .btn-rematch-action {
     background: var(--accent-emerald);
     color: #000;
 }
 
-.btn-newgame:hover, .btn-accept:hover {
+.btn-newgame:hover, .btn-accept:hover, .btn-rematch-action:hover {
     background: #059669;
     color: white;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.btn-primary-action {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-primary-action:hover {
+    background: #1d4ed8;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+.btn-danger-action {
+    background: var(--accent-danger);
+    color: white;
+}
+
+.btn-danger-action:hover {
+    background: #dc2626;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
 }
 
 .btn-decline {

@@ -49,10 +49,15 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Floating Review Banner:** Prominent on-board status badge showing current historical move with one-click return to live
   - **Non-Breaking Live Gameplay:** Background live match synchronization continues uninterrupted during position review; clicking any piece or clicking "LIVE" snaps back to live game instantly
   - **Auto-Scrolling:** Moves table automatically scrolls to keep active or viewed moves in view
+- **Phase 5 Professional Game Controls & Confirmation Dialogs** — Complete match lifecycle controls:
+  - **Offer, Accept & Decline Draw:** Full mutual consent protocol; opponent receives a styled prompt modal (`"Your opponent offered a draw"`) with Accept and Decline actions
+  - **Resign Confirmation Dialog:** Protected surrender flow prompting `"Are you sure you want to resign?"` with explicit forfeit warning
+  - **Leave Game & Abandonment Detection:** Allows players to vacate seats to spectate; warns and records forfeit if leaving an active match
+  - **Rematch with Automatic Color Swapping:** Post-game rematch request protocol; accepting automatically swaps player colors (`White ⇄ Black`) per tournament standards
+  - **Active-Match Reset Safeguards:** Starting a new game while moves are active triggers confirmation dialog to prevent accidental wipes
+  - **Game-State-Enforced Actions:** Dynamic client and server validation automatically disables invalid actions based on game phase, turn, seated status, and move count
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
-- **Draw Offers** — In-game draw offer protocol with mutual consent confirmation
-- **Resign & Quick Reset** — Clean surrender mechanics with confirmation modals
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
 
 ### 🌐 Real-Time Multiplayer & Social
@@ -174,9 +179,10 @@ newGame                      gameState {fen, turn, isCheck, history}
 | **Phase 2** | Chess Move Experience (Dynamic Legal Moves, Selection Switching, Dots, Rings, Pins, Castling, En Passant) | ✅ Complete |
 | **Phase 3** | Professional Chess Clocks (1+0 to 30+0, Increments, Server Authority, Anti-Cheat, Sub-Second Decimals, Timeout Detection) | ✅ Complete |
 | **Phase 4** | Professional Move History (SAN Notation, Historical Position Review, Navigation Toolbar, Keyboard Controls, Non-Breaking Live Gameplay) | ✅ Complete |
-| **Phase 5** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
-| **Phase 6** | ELO ratings, leaderboards, player profiles | 📋 Planned |
-| **Phase 7** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 5** | Professional Game Controls (Offer/Accept/Decline Draw, Resign Modal, Leave Game Forfeit, Rematch with Color Swap, Reset Safeguards) | ✅ Complete |
+| **Phase 6** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 7** | ELO ratings, leaderboards, player profiles | 📋 Planned |
+| **Phase 8** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 

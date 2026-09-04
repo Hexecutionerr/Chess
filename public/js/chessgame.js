@@ -81,9 +81,10 @@ const btnExitReview     = document.getElementById("btnExitReview");
 
 const btnOfferDraw      = document.getElementById("btnOfferDraw");
 const btnResign         = document.getElementById("btnResign");
-const btnFlip           = document.getElementById("btnFlip");
+const btnRematch        = document.getElementById("btnRematch");
 const btnQuickNewGame   = document.getElementById("btnQuickNewGame");
-const btnNewGame        = document.getElementById("btnNewGame");
+const btnLeaveGame      = document.getElementById("btnLeaveGame");
+const btnFlip           = document.getElementById("btnFlip");
 
 const chatLog           = document.getElementById("chatLog");
 const chatForm          = document.getElementById("chatForm");
@@ -93,11 +94,37 @@ const gameOverModal     = document.getElementById("gameOverModal");
 const modalIcon         = document.getElementById("modalIcon");
 const modalTitle        = document.getElementById("modalTitle");
 const modalMessage      = document.getElementById("modalMessage");
+const btnModalRematch   = document.getElementById("btnModalRematch");
+const btnModalNewGame   = document.getElementById("btnModalNewGame");
+const btnModalReview    = document.getElementById("btnModalReview");
+const btnModalLeave     = document.getElementById("btnModalLeave");
 
 const drawOfferModal    = document.getElementById("drawOfferModal");
 const btnAcceptDraw     = document.getElementById("btnAcceptDraw");
 const btnDeclineDraw    = document.getElementById("btnDeclineDraw");
+
+const resignConfirmModal= document.getElementById("resignConfirmModal");
+const btnConfirmResign  = document.getElementById("btnConfirmResign");
+const btnCancelResign   = document.getElementById("btnCancelResign");
+
+const rematchOfferModal = document.getElementById("rematchOfferModal");
+const btnAcceptRematch  = document.getElementById("btnAcceptRematch");
+const btnDeclineRematch = document.getElementById("btnDeclineRematch");
+
+const leaveGameConfirmModal = document.getElementById("leaveGameConfirmModal");
+const btnConfirmLeave   = document.getElementById("btnConfirmLeave");
+const btnCancelLeave    = document.getElementById("btnCancelLeave");
+const leaveGameMessage  = document.getElementById("leaveGameMessage");
+
+const newGameConfirmModal   = document.getElementById("newGameConfirmModal");
+const btnConfirmNewGame = document.getElementById("btnConfirmNewGame");
+const btnCancelNewGame  = document.getElementById("btnCancelNewGame");
+
 const toastEl           = document.getElementById("toast");
+
+// Control state tracking
+let drawOfferedByMe = false;
+let rematchOfferedByMe = false;
 
 // ─── Sound System ─────────────────────────────────────────────
 const sounds = {
@@ -941,76 +968,235 @@ chatForm.addEventListener("submit", (e) => {
     }
 });
 
+// ─── Modal Helpers ───────────────────────────────────────────
+function openModal(modalEl) {
+    if (modalEl) modalEl.classList.add("visible");
+}
+
+function closeModal(modalEl) {
+    if (modalEl) modalEl.classList.remove("visible");
+}
+
+function closeAllConfirmModals() {
+    closeModal(drawOfferModal);
+    closeModal(resignConfirmModal);
+    closeModal(rematchOfferModal);
+    closeModal(leaveGameConfirmModal);
+    closeModal(newGameConfirmModal);
+}
+
+// ─── Control Buttons State & Validation ──────────────────────
+function updateActionButtonsState() {
+    const isPlayer = playerRole === "w" || playerRole === "b";
+    const movesPlayed = (moveHistory && moveHistory.length) || (chess.history && chess.history().length) || 0;
+
+    // 1. Resign: Only for seated players, in an active game with at least 1 move played
+    if (btnResign) {
+        btnResign.disabled = !isPlayer || isGameOver || movesPlayed === 0;
+    }
+
+    // 2. Offer Draw: Only for seated players, in active game with at least 1 move, not already offered
+    if (btnOfferDraw) {
+        if (drawOfferedByMe) {
+            btnOfferDraw.disabled = true;
+            btnOfferDraw.textContent = "Offered...";
+        } else {
+            btnOfferDraw.disabled = !isPlayer || isGameOver || movesPlayed === 0;
+            btnOfferDraw.textContent = "½ Draw";
+        }
+    }
+
+    // 3. Rematch: Only enabled when game is over and player is seated
+    if (btnRematch) {
+        if (rematchOfferedByMe) {
+            btnRematch.disabled = true;
+            btnRematch.textContent = "Offered...";
+        } else {
+            btnRematch.disabled = !isPlayer || !isGameOver;
+            btnRematch.textContent = "🔄 Rematch";
+        }
+    }
+    if (btnModalRematch) {
+        if (rematchOfferedByMe) {
+            btnModalRematch.disabled = true;
+            btnModalRematch.textContent = "Rematch Sent...";
+        } else {
+            btnModalRematch.disabled = !isPlayer || !isGameOver;
+            btnModalRematch.textContent = "🔄 Rematch";
+        }
+    }
+
+    // 4. Leave Game: Only enabled for seated players
+    if (btnLeaveGame) {
+        btnLeaveGame.disabled = !isPlayer;
+    }
+    if (btnModalLeave) {
+        btnModalLeave.disabled = !isPlayer;
+    }
+}
+
 // ─── Game Over Modal ─────────────────────────────────────────
 function showGameOverModal(data) {
     isGameOver = true;
     clocks.active = false;
-    btnResign.disabled = true;
-    btnOfferDraw.disabled = true;
+    drawOfferedByMe = false;
+    rematchOfferedByMe = false;
+    closeAllConfirmModals();
 
     if (data.type === "checkmate") {
         modalIcon.textContent = "👑";
+        modalIcon.className = "modal-icon text-blue";
         modalTitle.textContent = "Checkmate!";
     } else if (data.type === "timeout") {
         modalIcon.textContent = "⏱";
+        modalIcon.className = "modal-icon text-amber";
         modalTitle.textContent = "Time Out!";
     } else if (data.type === "resignation") {
         modalIcon.textContent = "⚑";
+        modalIcon.className = "modal-icon text-danger";
         modalTitle.textContent = "Resignation";
+    } else if (data.type === "abandonment") {
+        modalIcon.textContent = "🚪";
+        modalIcon.className = "modal-icon text-danger";
+        modalTitle.textContent = "Player Left";
     } else {
         modalIcon.textContent = "🤝";
+        modalIcon.className = "modal-icon text-amber";
         modalTitle.textContent = "Draw";
     }
 
     modalMessage.textContent = data.message;
-    gameOverModal.classList.add("visible");
+    openModal(gameOverModal);
     playSound("notify");
     updateTurnIndicators();
     updateClockDisplays();
+    updateActionButtonsState();
 }
 
 function hideGameOverModal() {
-    gameOverModal.classList.remove("visible");
+    closeModal(gameOverModal);
 }
 
-// ─── Control Buttons ─────────────────────────────────────────
+// ─── Control Buttons Event Listeners ─────────────────────────
+
+// 1. Resign (With Confirmation Dialog)
 btnResign.addEventListener("click", () => {
-    if (isGameOver || !playerRole) return;
-    if (confirm("Are you sure you want to resign?")) {
-        socket.emit("resign");
-    }
+    if (btnResign.disabled) return;
+    openModal(resignConfirmModal);
 });
 
+btnConfirmResign.addEventListener("click", () => {
+    closeModal(resignConfirmModal);
+    socket.emit("resign");
+});
+
+btnCancelResign.addEventListener("click", () => {
+    closeModal(resignConfirmModal);
+});
+
+// 2. Offer Draw
 btnOfferDraw.addEventListener("click", () => {
-    if (isGameOver || !playerRole) return;
+    if (btnOfferDraw.disabled) return;
+    drawOfferedByMe = true;
     socket.emit("offerDraw");
+    updateActionButtonsState();
     showToast("Draw offer sent to opponent");
 });
 
+btnAcceptDraw.addEventListener("click", () => {
+    closeModal(drawOfferModal);
+    socket.emit("acceptDraw");
+});
+
+btnDeclineDraw.addEventListener("click", () => {
+    closeModal(drawOfferModal);
+    socket.emit("declineDraw");
+});
+
+// 3. Rematch
+function handleRematchRequest() {
+    const isPlayer = playerRole === "w" || playerRole === "b";
+    if (!isGameOver || !isPlayer || rematchOfferedByMe) return;
+    rematchOfferedByMe = true;
+    socket.emit("offerRematch");
+    updateActionButtonsState();
+    showToast("Rematch offer sent to opponent");
+}
+
+btnRematch.addEventListener("click", handleRematchRequest);
+btnModalRematch.addEventListener("click", handleRematchRequest);
+
+btnAcceptRematch.addEventListener("click", () => {
+    closeModal(rematchOfferModal);
+    socket.emit("acceptRematch");
+});
+
+btnDeclineRematch.addEventListener("click", () => {
+    closeModal(rematchOfferModal);
+    socket.emit("declineRematch");
+});
+
+// 4. Leave Game (With Confirmation Dialog)
+function handleLeavePrompt() {
+    if (btnLeaveGame.disabled) return;
+    const movesPlayed = (moveHistory && moveHistory.length) || 0;
+    if (!isGameOver && movesPlayed > 0) {
+        leaveGameMessage.textContent = "An active match is underway. Leaving your seat will forfeit the match and grant victory to your opponent.";
+    } else {
+        leaveGameMessage.textContent = "Are you sure you want to vacate your seat and become a spectator?";
+    }
+    openModal(leaveGameConfirmModal);
+}
+
+btnLeaveGame.addEventListener("click", handleLeavePrompt);
+btnModalLeave.addEventListener("click", handleLeavePrompt);
+
+btnConfirmLeave.addEventListener("click", () => {
+    closeModal(leaveGameConfirmModal);
+    closeModal(gameOverModal);
+    socket.emit("leaveGame");
+});
+
+btnCancelLeave.addEventListener("click", () => {
+    closeModal(leaveGameConfirmModal);
+});
+
+// 5. New Game (With Confirmation if Game in Progress)
+btnQuickNewGame.addEventListener("click", () => {
+    const isPlayer = playerRole === "w" || playerRole === "b";
+    const movesPlayed = (moveHistory && moveHistory.length) || 0;
+    if (!isGameOver && movesPlayed > 0 && isPlayer) {
+        openModal(newGameConfirmModal);
+    } else {
+        socket.emit("newGame");
+    }
+});
+
+btnConfirmNewGame.addEventListener("click", () => {
+    closeModal(newGameConfirmModal);
+    socket.emit("newGame");
+});
+
+btnCancelNewGame.addEventListener("click", () => {
+    closeModal(newGameConfirmModal);
+});
+
+btnModalNewGame.addEventListener("click", () => {
+    closeModal(gameOverModal);
+    socket.emit("newGame");
+});
+
+btnModalReview.addEventListener("click", () => {
+    closeModal(gameOverModal);
+    showToast("Review mode: click moves in the notation table to inspect");
+});
+
+// 6. Flip Board
 btnFlip.addEventListener("click", () => {
     isFlipped = !isFlipped;
     renderLabels();
     renderBoard();
-    showToast(isFlipped ? "Board flipped" : "Board reset");
-});
-
-btnQuickNewGame.addEventListener("click", () => {
-    socket.emit("newGame");
-});
-
-btnNewGame.addEventListener("click", () => {
-    socket.emit("newGame");
-    hideGameOverModal();
-});
-
-btnAcceptDraw.addEventListener("click", () => {
-    socket.emit("acceptDraw");
-    drawOfferModal.classList.remove("visible");
-});
-
-btnDeclineDraw.addEventListener("click", () => {
-    socket.emit("declineDraw");
-    drawOfferModal.classList.remove("visible");
+    showToast(isFlipped ? "Board perspective flipped" : "Board perspective reset");
 });
 
 // ─── Socket.IO Event Handlers ─────────────────────────────────
@@ -1022,6 +1208,7 @@ socket.on("gameState", (state) => {
     selectedSquare = null;
     currentLegalMoves = [];
     viewingMoveIndex = null;
+    isGameOver = !!state.isGameOver;
 
     if (state.history && state.history.length > 0) {
         const last = state.history[state.history.length - 1];
@@ -1032,6 +1219,7 @@ socket.on("gameState", (state) => {
     }
     updateMoveHistory(state.history);
     updatePlayerInfo(state.players);
+    updateActionButtonsState();
     renderBoard();
 });
 
@@ -1041,6 +1229,7 @@ socket.on("playerRole", (role) => {
     selectedSquare = null;
     currentLegalMoves = [];
     updatePlayerInfo();
+    updateActionButtonsState();
     renderBoard();
     showToast(`You are playing as ${role === "w" ? "White" : "Black"}`);
 });
@@ -1050,6 +1239,7 @@ socket.on("spectatorRole", () => {
     selectedSquare = null;
     currentLegalMoves = [];
     updatePlayerInfo();
+    updateActionButtonsState();
     renderBoard();
     showToast("You are spectating this game");
 });
@@ -1057,6 +1247,7 @@ socket.on("spectatorRole", () => {
 // Player slot updates
 socket.on("playersUpdate", (playersData) => {
     updatePlayerInfo(playersData);
+    updateActionButtonsState();
 });
 
 // Server authoritative periodic clock sync
@@ -1080,6 +1271,8 @@ socket.on("move", (moveData) => {
     lastMove = { from: moveData.from, to: moveData.to };
     selectedSquare = null;
     currentLegalMoves = [];
+    drawOfferedByMe = false;
+    closeModal(drawOfferModal);
 
     // Synchronize authoritative clocks from server
     if (moveData.clocks) {
@@ -1099,6 +1292,7 @@ socket.on("move", (moveData) => {
 
     // Update history
     updateMoveHistory(moveData.history);
+    updateActionButtonsState();
 
     // If the user was in historical review mode, notify them with a toast
     if (viewingMoveIndex !== null) {
@@ -1110,12 +1304,36 @@ socket.on("move", (moveData) => {
 
 // Draw offer
 socket.on("drawOffered", (data) => {
-    drawOfferModal.classList.add("visible");
+    openModal(drawOfferModal);
     playSound("notify");
 });
 
 socket.on("drawDeclined", () => {
+    drawOfferedByMe = false;
+    updateActionButtonsState();
     showToast("Opponent declined the draw offer");
+});
+
+// Rematch offer
+socket.on("rematchOffered", (data) => {
+    openModal(rematchOfferModal);
+    playSound("notify");
+});
+
+socket.on("rematchDeclined", (data) => {
+    rematchOfferedByMe = false;
+    updateActionButtonsState();
+    showToast((data && data.reason) ? data.reason : "Opponent declined the rematch offer");
+});
+
+// Left game
+socket.on("leftGameSuccess", () => {
+    playerRole = null;
+    drawOfferedByMe = false;
+    rematchOfferedByMe = false;
+    updatePlayerInfo();
+    updateActionButtonsState();
+    showToast("You vacated your seat and are now spectating");
 });
 
 // Chat history and new messages
@@ -1147,6 +1365,8 @@ socket.on("gameOver", (data) => {
 // New game
 socket.on("newGame", (state) => {
     isGameOver = false;
+    drawOfferedByMe = false;
+    rematchOfferedByMe = false;
     lastMove = null;
     selectedSquare = null;
     currentLegalMoves = [];
@@ -1157,7 +1377,9 @@ socket.on("newGame", (state) => {
     }
     updateMoveHistory([]);
     hideGameOverModal();
+    closeAllConfirmModals();
     updatePlayerInfo();
+    updateActionButtonsState();
     renderBoard();
     showToast("New game started!");
     playSound("notify");
@@ -1182,4 +1404,5 @@ socket.on("disconnect", () => {
 renderLabels();
 renderBoard();
 updateClockDisplays();
+updateActionButtonsState();
 startLocalClockTicker();

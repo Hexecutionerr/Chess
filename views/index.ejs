@@ -261,17 +261,23 @@
                 <div class="panel-card interactions-card">
                     <!-- Action Buttons -->
                     <div class="game-action-toolbar">
-                        <button class="action-btn btn-draw" id="btnOfferDraw" title="Offer a draw">
+                        <button class="action-btn btn-draw" id="btnOfferDraw" title="Offer a draw to opponent" disabled>
                             ½ Draw
                         </button>
                         <button class="action-btn btn-resign" id="btnResign" title="Resign game" disabled>
                             ⚑ Resign
                         </button>
-                        <button class="action-btn btn-flip" id="btnFlip" title="Flip Board">
-                            🔄 Flip
+                        <button class="action-btn btn-rematch" id="btnRematch" title="Request rematch with swapped colors" disabled>
+                            🔄 Rematch
                         </button>
-                        <button class="action-btn btn-newgame-sm" id="btnQuickNewGame" title="New Game">
+                        <button class="action-btn btn-newgame-sm" id="btnQuickNewGame" title="Start a new game">
                             ⚡ New Game
+                        </button>
+                        <button class="action-btn btn-leave" id="btnLeaveGame" title="Leave seat and spectate" disabled>
+                            🚪 Leave
+                        </button>
+                        <button class="action-btn btn-flip" id="btnFlip" title="Flip Board Perspective">
+                            🔀 Flip
                         </button>
                     </div>
 
@@ -316,8 +322,13 @@
             <div class="modal-icon" id="modalIcon">♔</div>
             <div class="modal-title" id="modalTitle">Game Over</div>
             <div class="modal-message" id="modalMessage">Result details</div>
-            <div class="modal-actions">
-                <button class="btn btn-newgame" id="btnNewGame">♟ Play Again</button>
+            <div class="modal-actions dual">
+                <button class="btn btn-rematch-action" id="btnModalRematch">🔄 Rematch</button>
+                <button class="btn btn-newgame" id="btnModalNewGame">⚡ New Game</button>
+            </div>
+            <div class="modal-subactions">
+                <button class="btn-subaction" id="btnModalReview">👁️ Review Board</button>
+                <button class="btn-subaction text-danger" id="btnModalLeave">🚪 Leave Seat</button>
             </div>
         </div>
     </div>
@@ -325,12 +336,64 @@
     <!-- ─── Draw Offer Modal ───────────────────────────────────── -->
     <div class="modal-overlay" id="drawOfferModal">
         <div class="modal">
-            <div class="modal-icon">🤝</div>
+            <div class="modal-icon text-amber">🤝</div>
             <div class="modal-title">Draw Offered</div>
-            <div class="modal-message" id="drawOfferMessage">Your opponent is offering a draw. Do you accept?</div>
+            <div class="modal-message" id="drawOfferMessage">Your opponent offered a draw. Do you accept?</div>
             <div class="modal-actions dual">
                 <button class="btn btn-accept" id="btnAcceptDraw">Accept Draw</button>
                 <button class="btn btn-decline" id="btnDeclineDraw">Decline</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Resign Confirmation Modal ──────────────────────────── -->
+    <div class="modal-overlay" id="resignConfirmModal">
+        <div class="modal">
+            <div class="modal-icon text-danger">⚑</div>
+            <div class="modal-title">Resign Match?</div>
+            <div class="modal-message">Are you sure you want to resign? This will forfeit the match and award the victory to your opponent.</div>
+            <div class="modal-actions dual">
+                <button class="btn btn-danger-action" id="btnConfirmResign">Yes, Resign</button>
+                <button class="btn btn-decline" id="btnCancelResign">Keep Playing</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Rematch Offer Received Modal ───────────────────────── -->
+    <div class="modal-overlay" id="rematchOfferModal">
+        <div class="modal">
+            <div class="modal-icon text-blue">🔄</div>
+            <div class="modal-title">Rematch Requested</div>
+            <div class="modal-message">Your opponent requested a rematch with swapped colors! Would you like to play again?</div>
+            <div class="modal-actions dual">
+                <button class="btn btn-accept" id="btnAcceptRematch">Accept Rematch</button>
+                <button class="btn btn-decline" id="btnDeclineRematch">Decline</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Leave Game Confirmation Modal ──────────────────────── -->
+    <div class="modal-overlay" id="leaveGameConfirmModal">
+        <div class="modal">
+            <div class="modal-icon text-amber">🚪</div>
+            <div class="modal-title">Leave Game?</div>
+            <div class="modal-message" id="leaveGameMessage">Are you sure you want to leave your seat? If an active game is underway, you will forfeit.</div>
+            <div class="modal-actions dual">
+                <button class="btn btn-danger-action" id="btnConfirmLeave">Leave Seat</button>
+                <button class="btn btn-decline" id="btnCancelLeave">Stay</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── New Game Confirmation Modal ────────────────────────── -->
+    <div class="modal-overlay" id="newGameConfirmModal">
+        <div class="modal">
+            <div class="modal-icon text-blue">⚡</div>
+            <div class="modal-title">Start New Game?</div>
+            <div class="modal-message">An active match is in progress. Starting a new game will reset the board and timers for all players.</div>
+            <div class="modal-actions dual">
+                <button class="btn btn-primary-action" id="btnConfirmNewGame">Yes, Reset</button>
+                <button class="btn btn-decline" id="btnCancelNewGame">Cancel</button>
             </div>
         </div>
     </div>
