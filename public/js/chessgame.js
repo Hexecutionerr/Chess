@@ -16,7 +16,17 @@ let lastMove = null;            // { from, to } algebraic notation
 let isGameOver = false;
 let isFlipped = false;
 let moveHistory = [];
-let clocks = { w: 600, b: 600 };
+
+// ─── Clocks State (Server-Authoritative) ───────────────────────
+let clocks = {
+    wMs: 600000,
+    bMs: 600000,
+    active: false,
+    turn: "w",
+    lastSyncTime: Date.now(),
+    timeControl: { key: "10+0", base: 600, increment: 0, label: "10+0 • Rapid" }
+};
+let localClockTimer = null;
 
 // ─── Piece Values for Material Evaluation ─────────────────────
 const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
@@ -35,6 +45,9 @@ const opponentAvatarText= document.getElementById("opponentAvatarText");
 const playerAvatarText  = document.getElementById("playerAvatarText");
 const opponentClock     = document.getElementById("opponentClock");
 const playerClock       = document.getElementById("playerClock");
+const opponentIncrement = document.getElementById("opponentIncrement");
+const playerIncrement   = document.getElementById("playerIncrement");
+const timeControlSelect = document.getElementById("timeControlSelect");
 
 const opponentCapturedPieces = document.getElementById("opponentCapturedPieces");
 const playerCapturedPieces   = document.getElementById("playerCapturedPieces");
@@ -115,24 +128,108 @@ function getPieceImage(piece) {
     return `/img/pieces/${colorPrefix}${typeMap[piece.type]}.svg`;
 }
 
-// ─── Clock Helpers ────────────────────────────────────────────
-function formatTime(seconds) {
-    const s = Math.max(0, Math.floor(seconds));
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+// ─── Professional Clock Formatting & Interpolation ───────────
+function formatClockTime(ms) {
+    const totalSeconds = Math.max(0, ms) / 1000;
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = Math.floor(totalSeconds % 60);
+
+    // If under 20 seconds, show decimal tenths (e.g. 0:09.4, 0:03.1)
+    if (totalSeconds < 20 && totalSeconds > 0) {
+        const tenths = Math.floor((ms % 1000) / 100);
+        return `${mins}:${secs < 10 ? "0" : ""}${secs}.${tenths}`;
+    }
+
+    // Standard format (e.g. 10:00, 09:58)
+    return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
 function updateClockDisplays() {
-    const isUserWhite = playerRole === "w";
-    const userSeconds = isUserWhite ? clocks.w : clocks.b;
-    const oppSeconds  = isUserWhite ? clocks.b : clocks.w;
+    let currentWMs = clocks.wMs;
+    let currentBMs = clocks.bMs;
 
-    playerClock.textContent = formatTime(userSeconds);
-    opponentClock.textContent = formatTime(oppSeconds);
+    // Local high-precision interpolation for whichever player's clock is actively ticking
+    if (clocks.active && !isGameOver) {
+        const elapsed = Date.now() - clocks.lastSyncTime;
+        const currentTurn = clocks.turn || chess.turn();
+        if (currentTurn === "w") {
+            currentWMs = Math.max(0, clocks.wMs - elapsed);
+        } else if (currentTurn === "b") {
+            currentBMs = Math.max(0, clocks.bMs - elapsed);
+        }
+    }
 
-    playerClock.classList.toggle("low-time", userSeconds <= 30);
-    opponentClock.classList.toggle("low-time", oppSeconds <= 30);
+    const isUserWhite = (playerRole === "w" || playerRole === null);
+    const userMs = isUserWhite ? currentWMs : currentBMs;
+    const oppMs  = isUserWhite ? currentBMs : currentWMs;
+
+    if (playerClock) playerClock.textContent = formatClockTime(userMs);
+    if (opponentClock) opponentClock.textContent = formatClockTime(oppMs);
+
+    // Low-time visual warnings:
+    // Warning: <= 30 seconds (amber)
+    // Critical: <= 10 seconds (intense red pulse)
+    const userTotalSec = userMs / 1000;
+    const oppTotalSec  = oppMs / 1000;
+
+    if (playerClock) {
+        playerClock.classList.toggle("low-time-warning", userTotalSec <= 30 && userTotalSec > 10);
+        playerClock.classList.toggle("low-time-critical", userTotalSec <= 10);
+    }
+
+    if (opponentClock) {
+        opponentClock.classList.toggle("low-time-warning", oppTotalSec <= 30 && oppTotalSec > 10);
+        opponentClock.classList.toggle("low-time-critical", oppTotalSec <= 10);
+    }
+}
+
+// Local 50ms ticker to interpolate display smoothly between server broadcasts
+function startLocalClockTicker() {
+    if (localClockTimer) return;
+    localClockTimer = setInterval(() => {
+        if (clocks.active && !isGameOver) {
+            updateClockDisplays();
+        }
+    }, 50);
+}
+
+function syncServerClocks(clockData) {
+    if (!clockData) return;
+    clocks.wMs = clockData.wMs !== undefined ? clockData.wMs : (clockData.w * 1000);
+    clocks.bMs = clockData.bMs !== undefined ? clockData.bMs : (clockData.b * 1000);
+    clocks.active = Boolean(clockData.active);
+    clocks.turn = clockData.turn || chess.turn();
+    clocks.lastSyncTime = Date.now();
+
+    if (clockData.timeControl) {
+        clocks.timeControl = clockData.timeControl;
+        if (timeControlSelect && timeControlSelect.value !== clockData.timeControl.key) {
+            timeControlSelect.value = clockData.timeControl.key;
+        }
+    }
+
+    updateClockDisplays();
+}
+
+function showIncrementBadge(color, amount) {
+    if (!amount) return;
+    const isUser = (playerRole === color || (playerRole === null && color === "w"));
+    const badge = isUser ? playerIncrement : opponentIncrement;
+    if (badge) {
+        badge.textContent = `+${amount}s`;
+        badge.classList.remove("pop");
+        void badge.offsetWidth; // Force CSS reflow to re-trigger pop
+        badge.classList.add("pop");
+        setTimeout(() => badge.classList.remove("pop"), 1200);
+    }
+}
+
+// Time control selection
+if (timeControlSelect) {
+    timeControlSelect.addEventListener("change", () => {
+        const val = timeControlSelect.value;
+        socket.emit("setTimeControl", val);
+    });
 }
 
 // ─── Coordinate Labels ───────────────────────────────────────
@@ -215,7 +312,7 @@ function updateCapturedPieces() {
     renderPieces(whiteCapturesList, capturedByWhite);
     renderPieces(blackCapturesList, capturedByBlack);
 
-    const isUserWhite = playerRole === "w";
+    const isUserWhite = (playerRole === "w" || playerRole === null);
     const userCaptures = isUserWhite ? capturedByWhite : capturedByBlack;
     const oppCaptures  = isUserWhite ? capturedByBlack : capturedByWhite;
 
@@ -326,11 +423,11 @@ function toAlgebraic(row, col) {
     return `${String.fromCharCode(97 + col)}${8 - row}`;
 }
 
-// ─── Piece Selection (Phase 2 Experience) ─────────────────────
+// ─── Piece Selection (Phase 2 & 3 Experience) ─────────────────
 const selectPiece = (row, col) => {
     if (isGameOver) return;
 
-    // Must be the player's turn to select a piece
+    // Must be player's turn to select a piece
     if (!isPlayerTurn()) {
         triggerSubtleFeedback(row, col);
         showToast("Wait for your turn!");
@@ -352,17 +449,14 @@ const selectPiece = (row, col) => {
         return;
     }
 
-    // Click another own piece → switch selection and update legal moves
+    // Switch selection to new own piece
     selectedSquare = { row, col };
-
-    // Use Chess.js legal move generation (strictly respects turn, check, checkmate, pins, king safety, captures, castling, en passant, promotion)
     currentLegalMoves = chess.moves({ square: from, verbose: true });
     renderBoard();
 };
 
-// ─── Valid Move Highlighting (Phase 2 Experience) ─────────────
+// ─── Valid Move Highlighting ─────────────────────────────────
 const highlightValidMoves = (square) => {
-    // Highlight the selected square
     const selectedEl = boardElement.querySelector(
         `[data-row="${square.row}"][data-col="${square.col}"]`
     );
@@ -370,7 +464,6 @@ const highlightValidMoves = (square) => {
         selectedEl.classList.add("selected");
     }
 
-    // Display legal move indicators for every legal destination
     currentLegalMoves.forEach(move => {
         const toCol = move.to.charCodeAt(0) - 97;
         const toRow = 8 - parseInt(move.to[1]);
@@ -379,20 +472,17 @@ const highlightValidMoves = (square) => {
         );
 
         if (targetEl) {
-            // Check for capture (including en passant captures where move.flags contains 'e')
             const isCapture = Boolean(
                 move.captured ||
                 (move.flags && (move.flags.includes("c") || move.flags.includes("e")))
             );
 
             if (isCapture) {
-                // Legal capture: show clear capture indicator/ring
                 targetEl.classList.add("has-valid-capture");
                 const ring = document.createElement("div");
                 ring.className = "valid-capture-ring";
                 targetEl.appendChild(ring);
             } else {
-                // Legal empty destination: show small subtle circular dot
                 targetEl.classList.add("has-valid-move");
                 const dot = document.createElement("div");
                 dot.className = "valid-move-dot";
@@ -402,7 +492,7 @@ const highlightValidMoves = (square) => {
     });
 };
 
-// ─── Attempt Move (Client Validation & Dispatch) ─────────────
+// ─── Attempt Move (Client Validation & Immediate Clock Switch) ─
 const attemptMove = (source, target) => {
     if (!isPlayerTurn()) {
         triggerSubtleFeedback(target.row, target.col);
@@ -412,14 +502,11 @@ const attemptMove = (source, target) => {
     const from = toAlgebraic(source.row, source.col);
     const to = toAlgebraic(target.row, target.col);
 
-    // Verify move is in the legal moves generated by Chess.js
     const legalMove = currentLegalMoves.find(m => m.from === from && m.to === to);
 
     if (legalMove) {
-        // Legal destination: execute move
         handleMove(source, target, legalMove);
     } else {
-        // Illegal destination: do nothing / provide subtle feedback
         triggerSubtleFeedback(target.row, target.col);
         selectedSquare = null;
         currentLegalMoves = [];
@@ -427,7 +514,7 @@ const attemptMove = (source, target) => {
     }
 };
 
-// ─── Handle Move (Emit to Server) ─────────────────────────────
+// ─── Handle Move (Emit to Server with Immediate Clock Switch) ──
 const handleMove = (source, target, legalMove) => {
     const from = toAlgebraic(source.row, source.col);
     const to = toAlgebraic(target.row, target.col);
@@ -445,11 +532,16 @@ const handleMove = (source, target, legalMove) => {
         move.promotion = "q";
     }
 
+    // Immediately switch clock turn optimistically so there is ZERO perceived lag!
+    const currentTurn = chess.turn();
+    clocks.turn = (currentTurn === "w" ? "b" : "w");
+    clocks.lastSyncTime = Date.now();
+
     socket.emit("move", move);
 
-    // Clean up selection after move execution
     selectedSquare = null;
     currentLegalMoves = [];
+    updateClockDisplays();
 };
 
 // ─── Board Rendering ─────────────────────────────────────────
@@ -484,24 +576,20 @@ const renderBoard = () => {
                 pieceElement.classList.add("piece");
                 pieceElement.style.backgroundImage = `url('${getPieceImage(square)}')`;
 
-                // Draggable only when it's the player's turn and own piece
                 const canDrag = !isGameOver && playerRole === square.color && chess.turn() === playerRole;
                 pieceElement.draggable = canDrag;
                 if (canDrag) pieceElement.classList.add("draggable");
 
-                // Click on piece:
+                // Click on piece
                 pieceElement.addEventListener("click", (e) => {
                     e.stopPropagation();
                     if (isGameOver) return;
 
-                    // If clicking own piece: select, switch selection, or deselect
                     if (playerRole === square.color) {
                         selectPiece(rowindex, squareindex);
                     } else if (selectedSquare) {
-                        // Clicking opponent piece when a piece is selected: attempt capture
                         attemptMove(selectedSquare, { row: rowindex, col: squareindex });
                     } else {
-                        // Clicked opponent piece with no piece selected: subtle feedback
                         triggerSubtleFeedback(rowindex, squareindex);
                     }
                 });
@@ -511,7 +599,6 @@ const renderBoard = () => {
                     if (canDrag) {
                         draggedPiece = pieceElement;
                         sourceSquare = { row: rowindex, col: squareindex };
-                        // Immediately select and display legal moves on drag start
                         selectPiece(rowindex, squareindex);
                         e.dataTransfer.effectAllowed = "move";
                         setTimeout(() => pieceElement.classList.add("dragging"), 0);
@@ -528,7 +615,7 @@ const renderBoard = () => {
                 squareElement.appendChild(pieceElement);
             }
 
-            // Click on square (empty destination or square background)
+            // Click on square
             squareElement.addEventListener("click", () => {
                 if (isGameOver) return;
 
@@ -559,7 +646,6 @@ const renderBoard = () => {
         });
     });
 
-    // Apply legal move highlights if a piece is selected
     if (selectedSquare) {
         highlightValidMoves(selectedSquare);
     }
@@ -675,6 +761,7 @@ chatForm.addEventListener("submit", (e) => {
 // ─── Game Over Modal ─────────────────────────────────────────
 function showGameOverModal(data) {
     isGameOver = true;
+    clocks.active = false;
     btnResign.disabled = true;
     btnOfferDraw.disabled = true;
 
@@ -696,6 +783,7 @@ function showGameOverModal(data) {
     gameOverModal.classList.add("visible");
     playSound("notify");
     updateTurnIndicators();
+    updateClockDisplays();
 }
 
 function hideGameOverModal() {
@@ -755,8 +843,7 @@ socket.on("gameState", (state) => {
         lastMove = { from: last.from, to: last.to };
     }
     if (state.clocks) {
-        clocks.w = state.clocks.w;
-        clocks.b = state.clocks.b;
+        syncServerClocks(state.clocks);
     }
     updateMoveHistory(state.history);
     updatePlayerInfo(state.players);
@@ -787,11 +874,15 @@ socket.on("playersUpdate", (playersData) => {
     updatePlayerInfo(playersData);
 });
 
-// Clock tick broadcast
-socket.on("clockTick", (clockData) => {
-    clocks.w = clockData.w;
-    clocks.b = clockData.b;
-    updateClockDisplays();
+// Server authoritative periodic clock sync (anti-drift, anti-cheat)
+socket.on("clockSync", (clockData) => {
+    syncServerClocks(clockData);
+});
+
+// Time control changed
+socket.on("timeControlChanged", (snapshot) => {
+    syncServerClocks(snapshot);
+    showToast(`Time control set to ${snapshot.timeControl.label}`);
 });
 
 // Move broadcast
@@ -805,10 +896,14 @@ socket.on("move", (moveData) => {
     selectedSquare = null;
     currentLegalMoves = [];
 
+    // Synchronize authoritative clocks from server
     if (moveData.clocks) {
-        clocks.w = moveData.clocks.w;
-        clocks.b = moveData.clocks.b;
-        updateClockDisplays();
+        syncServerClocks(moveData.clocks);
+    }
+
+    // Trigger increment pop badge if increment was awarded
+    if (moveData.increment) {
+        showIncrementBadge(moveData.increment.color, moveData.increment.amount);
     }
 
     if (moveData.captured) {
@@ -864,8 +959,9 @@ socket.on("newGame", (state) => {
     selectedSquare = null;
     currentLegalMoves = [];
     chess.load(state.fen);
-    clocks = { w: 600, b: 600 };
-    updateClockDisplays();
+    if (state.clocks) {
+        syncServerClocks(state.clocks);
+    }
     updateMoveHistory([]);
     hideGameOverModal();
     updatePlayerInfo();
@@ -889,7 +985,8 @@ socket.on("disconnect", () => {
     if (text) text.textContent = "Reconnecting...";
 });
 
-// ─── Initial Render ───────────────────────────────────────────
+// ─── Initial Render & Start Local Clock Ticker ────────────────
 renderLabels();
 renderBoard();
 updateClockDisplays();
+startLocalClockTicker();

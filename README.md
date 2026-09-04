@@ -33,7 +33,15 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Legal Captures:** High-visibility capture rings framing enemy pieces (handles standard captures & en passant)
   - **Comprehensive Rules Respect:** Full support for Turn, Check, Checkmate, Absolute Pins, King Safety, Castling (O-O / O-O-O), En Passant, and Pawn Promotion
   - **Intuitive Interaction Flow:** Click to select, click again to deselect, click another own piece to switch selection instantly, click legal target to move, click illegal square for subtle feedback
-- **10-Minute Rapid Chess Clocks** — Real-time countdown clocks synchronized across players with timeout detection and low-time flash
+- **Phase 3 Professional Chess Clocks** — Full server-authoritative time controls:
+  - **Supported Formats:** `1+0`, `2+1` (Bullet), `3+0`, `3+2`, `5+0` (Blitz), `10+0`, `10+5`, `15+10` (Rapid), `30+0` (Classical)
+  - **Immediate Turn Switching:** Clock switches immediately after each legal move with zero delay
+  - **Server-Authoritative Timing:** High-precision millisecond tracking prevents client tampering or timer cheating
+  - **Accurate Timeout Detection:** Server-side 100ms interval detects exact timeouts and awards wins or FIDE Article 6.9 insufficient material draws
+  - **Move Increments:** Automatic addition of increment seconds (e.g. +1s, +2s, +5s, +10s) on move completion with floating badge animation
+  - **Multi-Stage Low-Time Warnings:** Visual amber pulse (`< 30s`) and critical red glowing alert (`< 10s`)
+  - **Sub-Second Precision Display:** Millisecond tenths display (`0:09.4`) under 20 seconds
+  - **Disconnect / Reconnect Persistence:** Full clock snapshot synchronized immediately upon reconnecting
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Draw Offers** — In-game draw offer protocol with mutual consent confirmation
@@ -157,10 +165,10 @@ newGame                      gameState {fen, turn, isCheck, history}
 |-------|----------|--------|
 | **Phase 1** | Professional UI, Complete Desktop Layout (Navbar, Clocks, Moves, Captured, Chat, Controls) | ✅ Complete |
 | **Phase 2** | Chess Move Experience (Dynamic Legal Moves, Selection Switching, Dots, Rings, Pins, Castling, En Passant) | ✅ Complete |
-| **Phase 3** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
-| **Phase 4** | ELO ratings, leaderboards, game history, player profiles | 📋 Planned |
-| **Phase 5** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
-| **Phase 6** | Chess puzzles, responsive mobile app, PWA | 📋 Planned |
+| **Phase 3** | Professional Chess Clocks (1+0 to 30+0, Increments, Server Authority, Anti-Cheat, Sub-Second Decimals, Timeout Detection) | ✅ Complete |
+| **Phase 4** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 5** | ELO ratings, leaderboards, game history, player profiles | 📋 Planned |
+| **Phase 6** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 

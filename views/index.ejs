@@ -108,7 +108,10 @@
                             <span class="turn-dot"></span>
                             <span class="turn-text">TURN</span>
                         </div>
-                        <div class="chess-clock" id="opponentClock">10:00</div>
+                        <div class="clock-wrap">
+                            <div class="chess-clock" id="opponentClock">10:00</div>
+                            <span class="increment-indicator" id="opponentIncrement"></span>
+                        </div>
                     </div>
                 </div>
 
@@ -147,7 +150,10 @@
                             <span class="turn-dot"></span>
                             <span class="turn-text">TURN</span>
                         </div>
-                        <div class="chess-clock" id="playerClock">10:00</div>
+                        <div class="clock-wrap">
+                            <div class="chess-clock" id="playerClock">10:00</div>
+                            <span class="increment-indicator" id="playerIncrement"></span>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -157,11 +163,29 @@
                 <!-- Match & Game Status Card -->
                 <div class="panel-card game-status-card">
                     <div class="status-header">
-                        <div class="match-type">
+                        <div class="match-type" id="matchTypeWrap">
                             <svg viewBox="0 0 24 24" fill="currentColor" class="match-icon">
                                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                             </svg>
-                            <span>Live Match • 10 min Rapid</span>
+                            <select id="timeControlSelect" class="time-control-select" title="Change Time Control">
+                                <optgroup label="Bullet">
+                                    <option value="1+0">1+0 • Bullet</option>
+                                    <option value="2+1">2+1 • Bullet</option>
+                                </optgroup>
+                                <optgroup label="Blitz">
+                                    <option value="3+0">3+0 • Blitz</option>
+                                    <option value="3+2">3+2 • Blitz</option>
+                                    <option value="5+0">5+0 • Blitz</option>
+                                </optgroup>
+                                <optgroup label="Rapid">
+                                    <option value="10+0" selected>10+0 • Rapid</option>
+                                    <option value="10+5">10+5 • Rapid</option>
+                                    <option value="15+10">15+10 • Rapid</option>
+                                </optgroup>
+                                <optgroup label="Classical">
+                                    <option value="30+0">30+0 • Classical</option>
+                                </optgroup>
+                            </select>
                         </div>
                         <div class="game-turn-pill" id="gameTurnPill">
                             <span class="pill-dot"></span>

@@ -19,61 +19,130 @@ let playerProfiles = {
     black: { name: "Hikaru_K", rating: 1515, avatarColor: "#10b981" }
 };
 
-// Clocks: 10 minutes (600s) default
-const START_TIME = 600;
-let clocks = {
-    w: START_TIME,
-    b: START_TIME,
+// ─── Supported Time Controls ──────────────────────────────────
+const TIME_CONTROLS = {
+    "1+0":   { base: 60,   increment: 0,  category: "Bullet",    label: "1+0 • Bullet" },
+    "2+1":   { base: 120,  increment: 1,  category: "Bullet",    label: "2+1 • Bullet" },
+    "3+0":   { base: 180,  increment: 0,  category: "Blitz",     label: "3+0 • Blitz" },
+    "3+2":   { base: 180,  increment: 2,  category: "Blitz",     label: "3+2 • Blitz" },
+    "5+0":   { base: 300,  increment: 0,  category: "Blitz",     label: "5+0 • Blitz" },
+    "10+0":  { base: 600,  increment: 0,  category: "Rapid",     label: "10+0 • Rapid" },
+    "10+5":  { base: 600,  increment: 5,  category: "Rapid",     label: "10+5 • Rapid" },
+    "15+10": { base: 900,  increment: 10, category: "Rapid",     label: "15+10 • Rapid" },
+    "30+0":  { base: 1800, increment: 0,  category: "Classical", label: "30+0 • Classical" },
+};
+
+let currentTimeControlKey = "10+0";
+let clockState = {
+    w: TIME_CONTROLS["10+0"].base * 1000, // in milliseconds
+    b: TIME_CONTROLS["10+0"].base * 1000, // in milliseconds
     active: false,
+    lastTurnTimestamp: null,
     timer: null,
 };
+let lastSyncTimestamp = 0;
 let drawOffer = null; // 'w' or 'b'
 let chatMessages = [];
 
-// ─── Clock Management ─────────────────────────────────────────
+// ─── Authoritative Clock Management ───────────────────────────
+function getClockSnapshot() {
+    let w = clockState.w;
+    let b = clockState.b;
+
+    if (clockState.active && clockState.lastTurnTimestamp) {
+        const currentTurn = chess.turn();
+        const elapsed = Date.now() - clockState.lastTurnTimestamp;
+        if (currentTurn === "w") w = Math.max(0, w - elapsed);
+        else if (currentTurn === "b") b = Math.max(0, b - elapsed);
+    }
+
+    const tc = TIME_CONTROLS[currentTimeControlKey] || TIME_CONTROLS["10+0"];
+    return {
+        wMs: Math.max(0, w),
+        bMs: Math.max(0, b),
+        w: Math.max(0, Math.ceil(w / 1000)),
+        b: Math.max(0, Math.ceil(b / 1000)),
+        active: clockState.active,
+        turn: chess.turn(),
+        lastTurnTimestamp: clockState.lastTurnTimestamp,
+        timeControl: {
+            key: currentTimeControlKey,
+            base: tc.base,
+            increment: tc.increment,
+            category: tc.category,
+            label: tc.label,
+        }
+    };
+}
+
 function startClock() {
-    if (clocks.timer) return;
-    clocks.active = true;
-    clocks.timer = setInterval(() => {
-        if (!clocks.active || chess.isGameOver()) {
+    if (clockState.timer) return;
+    clockState.active = true;
+    clockState.lastTurnTimestamp = Date.now();
+    lastSyncTimestamp = Date.now();
+
+    // High frequency server check (100ms) to guarantee cheating prevention & exact timeout detection
+    clockState.timer = setInterval(() => {
+        if (!clockState.active || chess.isGameOver()) {
             stopClock();
             return;
         }
-        const turn = chess.turn();
-        if (clocks[turn] > 0) {
-            clocks[turn]--;
-            io.emit("clockTick", {
-                w: clocks.w,
-                b: clocks.b,
-                turn: chess.turn()
-            });
-            if (clocks[turn] <= 0) {
-                stopClock();
-                const winner = turn === "w" ? "b" : "w";
+
+        const currentTurn = chess.turn();
+        const now = Date.now();
+        const elapsed = now - clockState.lastTurnTimestamp;
+        const remaining = clockState[currentTurn] - elapsed;
+
+        if (remaining <= 0) {
+            clockState[currentTurn] = 0;
+            stopClock();
+            const winner = currentTurn === "w" ? "b" : "w";
+
+            // FIDE Article 6.9: Draw if opponent cannot checkmate by any series of legal moves
+            const hasInsufficient = chess.isInsufficientMaterial();
+            if (hasInsufficient) {
+                io.emit("gameOver", {
+                    gameOver: true,
+                    type: "timeout",
+                    winner: null,
+                    message: "Draw — timeout with insufficient material!"
+                });
+            } else {
                 io.emit("gameOver", {
                     gameOver: true,
                     type: "timeout",
                     winner: winner,
-                    message: turn === "w" ? "Black wins on time!" : "White wins on time!"
+                    message: currentTurn === "w" ? "Black wins on time!" : "White wins on time!"
                 });
             }
+            io.emit("clockSync", getClockSnapshot());
+            return;
         }
-    }, 1000);
+
+        // Broadcast authoritative synchronization packet every 1 second
+        if (now - lastSyncTimestamp >= 1000) {
+            lastSyncTimestamp = now;
+            io.emit("clockSync", getClockSnapshot());
+        }
+    }, 100);
 }
 
 function stopClock() {
-    clocks.active = false;
-    if (clocks.timer) {
-        clearInterval(clocks.timer);
-        clocks.timer = null;
+    clockState.active = false;
+    if (clockState.timer) {
+        clearInterval(clockState.timer);
+        clockState.timer = null;
     }
 }
 
 function resetClocks() {
     stopClock();
-    clocks.w = START_TIME;
-    clocks.b = START_TIME;
-    clocks.active = false;
+    const tc = TIME_CONTROLS[currentTimeControlKey] || TIME_CONTROLS["10+0"];
+    clockState.w = tc.base * 1000;
+    clockState.b = tc.base * 1000;
+    clockState.active = false;
+    clockState.lastTurnTimestamp = null;
+    lastSyncTimestamp = 0;
 }
 
 // ─── Express Config ───────────────────────────────────────────
@@ -134,10 +203,10 @@ function getGameState() {
         isCheck: chess.isCheck(),
         isGameOver: chess.isGameOver(),
         history: chess.history({ verbose: true }),
-        clocks: {
-            w: clocks.w,
-            b: clocks.b,
-            active: clocks.active,
+        clocks: getClockSnapshot(),
+        timeControl: {
+            key: currentTimeControlKey,
+            ...TIME_CONTROLS[currentTimeControlKey]
         },
         players: {
             white: players.white ? playerProfiles.white : null,
@@ -210,6 +279,24 @@ io.on("connection", function (uniquesocket) {
         }
     });
 
+    // ── Set Time Control ──────────────────────────────────────
+    uniquesocket.on("setTimeControl", (key) => {
+        if (!TIME_CONTROLS[key]) return;
+        // Allow time control change if game hasn't started (no moves played and clocks idle)
+        if (chess.history().length === 0 && !clockState.active) {
+            currentTimeControlKey = key;
+            resetClocks();
+            const snapshot = getClockSnapshot();
+            io.emit("timeControlChanged", snapshot);
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: `Time control set to ${TIME_CONTROLS[key].label}`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+    });
+
     // ── Move ──────────────────────────────────────────────────
     uniquesocket.on("move", (move) => {
         try {
@@ -217,17 +304,51 @@ io.on("connection", function (uniquesocket) {
             if (chess.turn() === "w" && uniquesocket.id !== players.white) return;
             if (chess.turn() === "b" && uniquesocket.id !== players.black) return;
 
+            // Deduct elapsed time from moving player
+            const movingColor = chess.turn();
+            if (clockState.active && clockState.lastTurnTimestamp) {
+                const elapsed = Date.now() - clockState.lastTurnTimestamp;
+                clockState[movingColor] = Math.max(0, clockState[movingColor] - elapsed);
+
+                // Detect timeout before move can complete
+                if (clockState[movingColor] <= 0) {
+                    stopClock();
+                    const winner = movingColor === "w" ? "b" : "w";
+                    const hasInsufficient = chess.isInsufficientMaterial();
+                    io.emit("gameOver", {
+                        gameOver: true,
+                        type: "timeout",
+                        winner: hasInsufficient ? null : winner,
+                        message: hasInsufficient
+                            ? "Draw — timeout with insufficient material!"
+                            : `${movingColor === "w" ? "Black" : "White"} wins on time!`
+                    });
+                    io.emit("clockSync", getClockSnapshot());
+                    return;
+                }
+            }
+
             const result = chess.move(move);
             if (result) {
-                // Start clock on first move if both players are present
-                if (!clocks.active && !chess.isGameOver()) {
+                const tc = TIME_CONTROLS[currentTimeControlKey] || TIME_CONTROLS["10+0"];
+
+                // Add increment to the player who just made a move
+                if (tc.increment > 0 && clockState.active) {
+                    clockState[result.color] += tc.increment * 1000;
+                }
+
+                // Start clock if not already active
+                if (!clockState.active && !chess.isGameOver()) {
                     startClock();
+                } else {
+                    // Update turn timestamp for the opponent
+                    clockState.lastTurnTimestamp = Date.now();
                 }
 
                 // Reset any pending draw offer on move
                 drawOffer = null;
 
-                // Broadcast move with metadata to all clients
+                // Broadcast move with authoritative clock snapshot
                 io.emit("move", {
                     from: result.from,
                     to: result.to,
@@ -238,7 +359,8 @@ io.on("connection", function (uniquesocket) {
                     isCheck: chess.isCheck(),
                     fen: chess.fen(),
                     history: chess.history({ verbose: true }),
-                    clocks: { w: clocks.w, b: clocks.b }
+                    clocks: getClockSnapshot(),
+                    increment: tc.increment > 0 ? { color: result.color, amount: tc.increment } : null
                 });
 
                 io.emit("boardState", chess.fen());
@@ -255,7 +377,6 @@ io.on("connection", function (uniquesocket) {
             }
         } catch (err) {
             console.log(err);
-            uniquesocket.emit("invalidMove", move);
         }
     });
 
@@ -382,7 +503,7 @@ io.on("connection", function (uniquesocket) {
         io.emit("chatMessage", {
             sender: "System",
             role: "sys",
-            text: "New game started! 10:00 Rapid on the clock.",
+            text: `New game started! ${TIME_CONTROLS[currentTimeControlKey].label} on the clock.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
         console.log("[newGame] Game reset");

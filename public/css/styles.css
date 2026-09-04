@@ -468,37 +468,112 @@ html, body {
     50% { opacity: 0.4; transform: scale(0.8); }
 }
 
+.clock-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
 .chess-clock {
     font-family: var(--font-mono);
     font-size: 1.25rem;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     color: var(--text-secondary);
     background: var(--bg-deep);
     border: 1px solid var(--border-subtle);
     padding: 4px 12px;
     border-radius: var(--radius-md);
     letter-spacing: -0.02em;
-    min-width: 76px;
+    min-width: 82px;
     text-align: center;
     transition: all 0.2s ease;
+    user-select: none;
 }
 
 .player-strip.active-turn .chess-clock {
     color: var(--text-white);
     background: var(--bg-elevated);
     border-color: var(--accent-emerald);
-    box-shadow: 0 0 14px rgba(16, 185, 129, 0.25);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.3);
 }
 
-.chess-clock.low-time {
-    color: var(--accent-danger) !important;
+/* Low-time visual warning (< 30s) */
+.chess-clock.low-time-warning {
+    color: #fbbf24 !important;
+    border-color: #f59e0b !important;
+    background: rgba(245, 158, 11, 0.12) !important;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Critical low-time visual warning (< 10s) */
+.chess-clock.low-time-critical {
+    color: #f87171 !important;
     border-color: var(--accent-danger) !important;
-    animation: clockBlink 1s infinite;
+    background: rgba(239, 68, 68, 0.18) !important;
+    box-shadow: 0 0 18px rgba(239, 68, 68, 0.5) !important;
+    animation: clockUrgentFlash 0.8s infinite alternate ease-in-out;
 }
 
-@keyframes clockBlink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+@keyframes clockUrgentFlash {
+    0% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.4)); }
+    100% { transform: scale(1.04); filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.8)); }
+}
+
+.increment-indicator {
+    position: absolute;
+    right: -6px;
+    top: -12px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    padding: 1px 5px;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 10;
+}
+
+.increment-indicator.pop {
+    opacity: 1;
+    transform: translateY(-4px);
+}
+
+.time-control-select {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-white);
+    font-family: var(--font-main);
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.time-control-select:hover {
+    border-color: var(--border-medium);
+}
+
+.time-control-select:focus {
+    border-color: var(--accent-emerald);
+}
+
+.time-control-select optgroup {
+    background: var(--bg-deep);
+    color: var(--text-secondary);
+}
+
+.time-control-select option {
+    background: var(--bg-surface);
+    color: var(--text-primary);
 }
 
 /* ═══════════════════════════════════════════════════════════════
