@@ -1337,10 +1337,35 @@ function showGameOverModal(data) {
         if (modalOutcome) {
             modalOutcome.textContent = "DRAW 🤝";
             modalOutcome.classList.add("outcome-draw");
+    modalMessage.textContent = data.message;
+
+    // Phase 14: Display Elo Rating Change Badge
+    const modalRatingBadge    = document.getElementById("modalRatingBadge");
+    const modalRatingCategory = document.getElementById("modalRatingCategory");
+    const modalRatingChange   = document.getElementById("modalRatingChange");
+    const modalRatingNew      = document.getElementById("modalRatingNew");
+
+    if (data.ratings && data.ratings.updated && modalRatingBadge) {
+        let myInfo = null;
+        if (playerRole === "w") myInfo = data.ratings.white;
+        else if (playerRole === "b") myInfo = data.ratings.black;
+
+        if (myInfo) {
+            modalRatingBadge.style.display = "inline-flex";
+            if (modalRatingCategory) modalRatingCategory.textContent = (data.ratings.category || "RAPID").toUpperCase();
+            if (modalRatingChange) {
+                const sign = myInfo.delta > 0 ? "+" : "";
+                modalRatingChange.textContent = `${sign}${myInfo.delta}`;
+                modalRatingChange.className = "rating-badge-change " + (myInfo.delta > 0 ? "text-emerald" : (myInfo.delta < 0 ? "text-danger" : "text-amber"));
+            }
+            if (modalRatingNew) modalRatingNew.textContent = `(${myInfo.newRating})`;
+        } else {
+            modalRatingBadge.style.display = "none";
         }
+    } else if (modalRatingBadge) {
+        modalRatingBadge.style.display = "none";
     }
 
-    modalMessage.textContent = data.message;
     openModal(gameOverModal);
     playSound("notify");
     updateClockDisplays();
@@ -1612,6 +1637,7 @@ const btnCopyRoomCode        = document.getElementById("btnCopyRoomCode");
 const spectatorIndicatorPill = document.getElementById("spectatorIndicatorPill");
 
 let selectedCreateColor = "w";
+let selectedCreateIsRated = true;
 let activeGameRoomId = "default";
 
 // Color selection in Create Game Modal
@@ -1620,6 +1646,16 @@ btnColorPicks.forEach(btn => {
         btnColorPicks.forEach(b => b.classList.remove("selected"));
         btn.classList.add("selected");
         selectedCreateColor = btn.dataset.color || "w";
+    });
+});
+
+// Game Mode selection in Create Game Modal (Rated vs Casual)
+const btnModePicks = document.querySelectorAll(".btn-mode-pick");
+btnModePicks.forEach(btn => {
+    btn.addEventListener("click", () => {
+        btnModePicks.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        selectedCreateIsRated = btn.dataset.rated !== "false";
     });
 });
 
@@ -1644,6 +1680,7 @@ if (btnSubmitCreateGame) {
         socket.emit("createPrivateGame", {
             timeControl: tc,
             preferredColor: selectedCreateColor,
+            isRated: selectedCreateIsRated,
             sessionToken: sessionToken
         });
     });
@@ -1961,6 +1998,57 @@ socket.on("chatHistory", (history) => {
 
 socket.on("chatMessage", (msg) => {
     appendChatMessage(msg);
+});
+
+// Phase 14: Rating Update Listener
+socket.on("ratingUpdate", (data) => {
+    if (!data || !data.updated) return;
+
+    let myInfo = null;
+    let oppInfo = null;
+    if (playerRole === "w") {
+        myInfo = data.white;
+        oppInfo = data.black;
+    } else if (playerRole === "b") {
+        myInfo = data.black;
+        oppInfo = data.white;
+    }
+
+    if (myInfo && playerRating) {
+        playerRating.textContent = myInfo.newRating;
+    }
+    if (oppInfo && opponentRating) {
+        opponentRating.textContent = oppInfo.newRating;
+    }
+
+    // Update Profile Modal category rating card
+    if (data.category && myInfo) {
+        const cat = data.category.toLowerCase();
+        const el = document.getElementById(`prof${cat.charAt(0).toUpperCase() + cat.slice(1)}Rating`);
+        if (el) el.textContent = myInfo.newRating;
+    }
+
+    // Update Game Over modal badge if visible
+    const modalRatingBadge    = document.getElementById("modalRatingBadge");
+    const modalRatingCategory = document.getElementById("modalRatingCategory");
+    const modalRatingChange   = document.getElementById("modalRatingChange");
+    const modalRatingNew      = document.getElementById("modalRatingNew");
+
+    if (myInfo && modalRatingBadge) {
+        modalRatingBadge.style.display = "inline-flex";
+        if (modalRatingCategory) modalRatingCategory.textContent = (data.category || "RAPID").toUpperCase();
+        if (modalRatingChange) {
+            const sign = myInfo.delta > 0 ? "+" : "";
+            modalRatingChange.textContent = `${sign}${myInfo.delta}`;
+            modalRatingChange.className = "rating-badge-change " + (myInfo.delta > 0 ? "text-emerald" : (myInfo.delta < 0 ? "text-danger" : "text-amber"));
+        }
+        if (modalRatingNew) modalRatingNew.textContent = `(${myInfo.newRating})`;
+    }
+
+    if (myInfo) {
+        const sign = myInfo.delta >= 0 ? "+" : "";
+        showToast(`Rating (${(data.category || "RAPID").toUpperCase()}): ${sign}${myInfo.delta} ➔ ${myInfo.newRating}`);
+    }
 });
 
 // Invalid move

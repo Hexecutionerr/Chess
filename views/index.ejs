@@ -554,6 +554,11 @@
             <div class="modal-outcome" id="modalOutcome">You Won!</div>
             <div class="modal-title" id="modalTitle">CHECKMATE</div>
             <div class="modal-message" id="modalMessage">Result details</div>
+            <div class="modal-rating-badge" id="modalRatingBadge" style="display: none;">
+                <span class="rating-badge-category" id="modalRatingCategory">RAPID</span>
+                <span class="rating-badge-change text-emerald" id="modalRatingChange">+16</span>
+                <span class="rating-badge-new" id="modalRatingNew">(1556)</span>
+            </div>
             <div class="modal-actions dual">
                 <button class="btn btn-rematch-action" id="btnModalRematch">🔄 Rematch</button>
                 <button class="btn btn-newgame" id="btnModalNewGame">⚡ New Game</button>
@@ -683,6 +688,14 @@
                     <button type="button" class="btn-color-pick selected" data-color="w">⚪ White</button>
                     <button type="button" class="btn-color-pick" data-color="random">🎲 Random</button>
                     <button type="button" class="btn-color-pick" data-color="b">⚫ Black</button>
+                </div>
+            </div>
+
+            <div class="config-row">
+                <label class="config-label">Mode</label>
+                <div class="color-picker-row">
+                    <button type="button" class="btn-mode-pick selected" id="btnModeRated" data-rated="true">🏆 Rated</button>
+                    <button type="button" class="btn-mode-pick" id="btnModeCasual" data-rated="false">☕ Casual</button>
                 </div>
             </div>
 

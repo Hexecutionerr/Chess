@@ -55,6 +55,8 @@ class GameRoom {
         this.chatMessages = [];
         this.spectators = new Set();
         this.isPrivate = !!options.isPrivate;
+        this.isRated = options.isRated !== undefined ? !!options.isRated : true;
+        this.isCasual = !this.isRated;
         this.createdAt = Date.now();
     }
 
@@ -111,8 +113,6 @@ class GameRoom {
 
             if (remaining <= 0) {
                 this.clockState[currentTurn] = 0;
-                this.isGameOverState = true;
-                this.stopClock();
                 const winner = currentTurn === "w" ? "b" : "w";
 
                 // FIDE Article 6.9: Draw if opponent cannot checkmate by any legal move series
@@ -128,8 +128,7 @@ class GameRoom {
                     winner: winner,
                     message: currentTurn === "w" ? "Black wins on time!" : "White wins on time!"
                 };
-                io.to(this.id).emit("gameOver", gameOverData);
-                db.finalizeGame(this.id, gameOverData, this.chess.pgn());
+                handleGameOver(this, gameOverData);
                 io.to(this.id).emit("clockSync", this.getClockSnapshot());
                 return;
             }
@@ -276,10 +275,51 @@ app.get("/api/games", async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 20;
         const status = req.query.status;
         const timeControl = req.query.timeControl;
-        const username = req.query.username;
-
         const games = await db.getRecentGames({ limit, status, timeControl, username });
         res.json(games);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Unified Game Over Handler (Phase 14 Elo & Database) ──────
+async function handleGameOver(room, gameOverData) {
+    if (!room || room.isGameOverState) return;
+    room.isGameOverState = true;
+    room.stopClock();
+
+    const pgn = room.chess ? room.chess.pgn() : "";
+    await db.finalizeGame(room.id, gameOverData, pgn);
+
+    const ratingResult = await db.processGameRatings(room, gameOverData);
+    if (ratingResult && ratingResult.updated) {
+        gameOverData.ratings = ratingResult;
+        io.to(room.id).emit("ratingUpdate", ratingResult);
+        io.to(room.id).emit("playersUpdate", room.getPlayersSnapshot());
+    }
+
+    io.to(room.id).emit("gameOver", gameOverData);
+}
+
+// ─── Player Profile & Elo Rating REST Endpoints (Phase 14) ────
+app.get("/api/players/:identifier", async (req, res) => {
+    try {
+        const player = await db.getPlayerByIdentifier(req.params.identifier);
+        if (!player) return res.status(404).json({ error: "Player not found" });
+        res.json(player);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/api/ratings/calculate", (req, res) => {
+    try {
+        const { whiteRating, blackRating, winner, kFactor } = req.body;
+        if (typeof whiteRating !== "number" || typeof blackRating !== "number") {
+            return res.status(400).json({ error: "whiteRating and blackRating must be numbers" });
+        }
+        const result = db.calculateElo(whiteRating, blackRating, winner, { kFactor });
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -446,9 +486,11 @@ io.on("connection", function (uniquesocket) {
             newRoomId = "ARENA-" + Math.floor(1000 + Math.random() * 9000);
         } while (rooms.has(newRoomId));
 
+        const isRated = data && data.isRated !== undefined ? !!data.isRated : (!data?.casual);
         const newRoom = new GameRoom(newRoomId, {
             isPrivate: true,
-            timeControl: tcKey
+            timeControl: tcKey,
+            isRated: isRated
         });
         rooms.set(newRoomId, newRoom);
 
@@ -661,8 +703,6 @@ io.on("connection", function (uniquesocket) {
                 if (!session.connected) {
                     console.log(`[grace timeout] ${leftRole} failed to reconnect in ${room.id}`);
                     if (!room.isGameFinished()) {
-                        room.isGameOverState = true;
-                        room.stopClock();
                         const isAborted = movesCount === 0;
                         const discGameOverData = isAborted ? {
                             gameOver: true,
@@ -675,8 +715,7 @@ io.on("connection", function (uniquesocket) {
                             winner: opponentChar,
                             message: `${opponentRoleName} wins — ${leftRole} abandoned the game!`
                         };
-                        io.to(room.id).emit("gameOver", discGameOverData);
-                        db.finalizeGame(room.id, discGameOverData, room.chess.pgn());
+                        handleGameOver(room, discGameOverData);
                     }
                     room.playerSessions[roleKey] = null;
                     room.players[roleKey] = null;
@@ -833,7 +872,6 @@ io.on("connection", function (uniquesocket) {
             room.clockState[movingColor] = Math.max(0, room.clockState[movingColor] - elapsed);
 
             if (room.clockState[movingColor] <= 0) {
-                room.stopClock();
                 const winner = movingColor === "w" ? "b" : "w";
                 const hasInsufficient = room.chess.isInsufficientMaterial();
                 const moveTimeoutData = {
@@ -844,8 +882,7 @@ io.on("connection", function (uniquesocket) {
                         ? "Draw — timeout with insufficient material!"
                         : `${movingColor === "w" ? "Black" : "White"} wins on time!`
                 };
-                io.to(room.id).emit("gameOver", moveTimeoutData);
-                db.finalizeGame(room.id, moveTimeoutData, room.chess.pgn());
+                handleGameOver(room, moveTimeoutData);
                 io.to(room.id).emit("clockSync", room.getClockSnapshot());
                 return;
             }
@@ -887,10 +924,7 @@ io.on("connection", function (uniquesocket) {
 
                 const gameOverResult = room.checkGameOver();
                 if (gameOverResult) {
-                    room.isGameOverState = true;
-                    room.stopClock();
-                    io.to(room.id).emit("gameOver", gameOverResult);
-                    db.finalizeGame(room.id, gameOverResult, room.chess.pgn());
+                    handleGameOver(room, gameOverResult);
                 }
             } else {
                 uniquesocket.emit("invalidMove", move);
@@ -911,9 +945,6 @@ io.on("connection", function (uniquesocket) {
         else return; // Unauthorized spectator cannot resign
 
         if (room.isGameFinished()) return;
-
-        room.isGameOverState = true;
-        room.stopClock();
         const winner = resignColor === "w" ? "b" : "w";
         const resignerName = resignColor === "w" ? room.playerProfiles.white.name : room.playerProfiles.black.name;
 
@@ -926,8 +957,7 @@ io.on("connection", function (uniquesocket) {
                     ? `Black wins — ${resignerName} resigned!`
                     : `White wins — ${resignerName} resigned!`,
         };
-        io.to(room.id).emit("gameOver", resignGameOverData);
-        db.finalizeGame(room.id, resignGameOverData, room.chess.pgn());
+        handleGameOver(room, resignGameOverData);
 
         io.to(room.id).emit("chatMessage", {
             sender: "System",
@@ -950,16 +980,13 @@ io.on("connection", function (uniquesocket) {
         if (room.isGameFinished() || room.chess.history().length === 0) return;
 
         if (room.drawOffer && room.drawOffer !== offerColor) {
-            room.isGameOverState = true;
-            room.stopClock();
             const drawGameOverData = {
                 gameOver: true,
                 type: "draw",
                 winner: null,
                 message: "Draw agreed by both players!"
             };
-            io.to(room.id).emit("gameOver", drawGameOverData);
-            db.finalizeGame(room.id, drawGameOverData, room.chess.pgn());
+            handleGameOver(room, drawGameOverData);
             room.drawOffer = null;
         } else if (!room.drawOffer) {
             room.drawOffer = offerColor;
@@ -988,16 +1015,13 @@ io.on("connection", function (uniquesocket) {
         if (room.isGameFinished()) return;
 
         if (room.drawOffer && room.drawOffer !== acceptColor) {
-            room.isGameOverState = true;
-            room.stopClock();
             const drawGameOverData = {
                 gameOver: true,
                 type: "draw",
                 winner: null,
                 message: "Draw agreed by both players!"
             };
-            io.to(room.id).emit("gameOver", drawGameOverData);
-            db.finalizeGame(room.id, drawGameOverData, room.chess.pgn());
+            handleGameOver(room, drawGameOverData);
             room.drawOffer = null;
             io.to(room.id).emit("chatMessage", {
                 sender: "System",
@@ -1042,8 +1066,6 @@ io.on("connection", function (uniquesocket) {
         const opponentRoleName = opponentColor === "w" ? "White" : "Black";
 
         if (!room.isGameFinished()) {
-            room.isGameOverState = true;
-            room.stopClock();
             const isAborted = room.chess.history().length === 0;
             const leaveGameOverData = isAborted ? {
                 gameOver: true,
@@ -1056,8 +1078,7 @@ io.on("connection", function (uniquesocket) {
                 winner: opponentColor,
                 message: `${opponentRoleName} wins — ${leftRoleName} left the game!`
             };
-            io.to(room.id).emit("gameOver", leaveGameOverData);
-            db.finalizeGame(room.id, leaveGameOverData, room.chess.pgn());
+            handleGameOver(room, leaveGameOverData);
         }
 
         const roleKey = leftColor === "w" ? "white" : "black";

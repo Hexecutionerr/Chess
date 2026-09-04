@@ -1,9 +1,17 @@
 const mongoose = require("mongoose");
 const Game = require("./models/Game");
+const Player = require("./models/Player");
+const {
+    calculateElo,
+    validateRatedGame,
+    getRatingCategory,
+    DEFAULT_K_FACTOR
+} = require("./elo");
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/chess";
 
 let isConnected = false;
+const inMemoryPlayers = new Map();
 
 async function connectDB() {
     if (isConnected) return;
@@ -55,6 +63,7 @@ async function syncActiveGame(room) {
         timeControl: room.currentTimeControlKey || "10+0",
         initialTime: initialTime,
         increment: increment,
+        isRated: room.isRated !== false,
         status: currentStatus,
         PGN: room.chess ? room.chess.pgn() : "",
         createdAt: room.createdAt ? new Date(room.createdAt) : new Date()
@@ -72,7 +81,7 @@ async function syncActiveGame(room) {
             return await Game.findOneAndUpdate(
                 { gameId: room.id },
                 { $set: gameDoc },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
+                { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
             );
         } catch (e) {
             console.error(`[Database] Failed to sync active game ${room.id}:`, e.message);
@@ -162,7 +171,7 @@ async function finalizeGame(gameId, gameOverData, pgn) {
             const updated = await Game.findOneAndUpdate(
                 { gameId: gameId },
                 { $set: updateFields },
-                { new: true }
+                { returnDocument: 'after' }
             );
             console.log(`[Database] Finalized game ${gameId}: Result ${resultNotation} (${status})`);
             return updated;
@@ -215,6 +224,218 @@ async function getRecentGames({ limit = 20, status, timeControl, username } = {}
     }
 }
 
+/**
+ * Get or create player document by session token
+ */
+async function getOrCreatePlayer(sessionToken, defaultUsername = "Magnus_G") {
+    if (!sessionToken) return null;
+
+    if (isConnected) {
+        try {
+            let player = await Player.findOne({ sessionToken });
+            if (!player) {
+                player = new Player({
+                    sessionToken,
+                    username: defaultUsername,
+                    ratings: {
+                        bullet: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 },
+                        blitz: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 },
+                        rapid: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 },
+                        classical: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 }
+                    }
+                });
+                await player.save();
+            } else if (defaultUsername && defaultUsername !== "Anonymous" && defaultUsername !== "White" && defaultUsername !== "Black") {
+                player.username = defaultUsername;
+                await player.save();
+            }
+            return player;
+        } catch (e) {
+            console.error(`[Database] Error in getOrCreatePlayer:`, e.message);
+        }
+    }
+
+    // In-memory fallback
+    if (!inMemoryPlayers.has(sessionToken)) {
+        inMemoryPlayers.set(sessionToken, {
+            sessionToken,
+            username: defaultUsername,
+            ratings: {
+                bullet: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 },
+                blitz: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 },
+                rapid: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 },
+                classical: { current: 1500, peak: 1500, games: 0, wins: 0, losses: 0, draws: 0 }
+            },
+            ratingHistory: [],
+            save: async function () { return this; }
+        });
+    }
+    const memPlayer = inMemoryPlayers.get(sessionToken);
+    if (defaultUsername && defaultUsername !== "Anonymous" && defaultUsername !== "White" && defaultUsername !== "Black") {
+        memPlayer.username = defaultUsername;
+    }
+    return memPlayer;
+}
+
+/**
+ * Fetch player profile by sessionToken or username
+ */
+async function getPlayerByIdentifier(identifier) {
+    if (!identifier) return null;
+    if (isConnected) {
+        try {
+            return await Player.findOne({
+                $or: [{ sessionToken: identifier }, { username: identifier }]
+            }).lean();
+        } catch (e) {
+            console.error(`[Database] Error getting player ${identifier}:`, e.message);
+        }
+    }
+    for (const p of inMemoryPlayers.values()) {
+        if (p.sessionToken === identifier || p.username === identifier) return p;
+    }
+    return null;
+}
+
+/**
+ * Process Elo rating updates for a completed match
+ * Validates eligibility (casual, aborted, invalid games are rejected)
+ * Calculates category Elo delta and updates player records & game document.
+ */
+async function processGameRatings(room, gameOverData) {
+    if (!room || !gameOverData) return { updated: false, reason: "Incomplete match data" };
+
+    const validation = validateRatedGame({
+        isRated: room.isRated !== false,
+        casual: !!room.isCasual,
+        status: gameOverData.type,
+        type: gameOverData.type,
+        chess: room.chess,
+        whitePlayer: room.playerSessions?.white,
+        blackPlayer: room.playerSessions?.black
+    });
+
+    if (!validation.isEligible) {
+        console.log(`[ELO] Rating calculation skipped for room ${room.id}: ${validation.reason}`);
+        return { updated: false, reason: validation.reason };
+    }
+
+    const category = getRatingCategory(room.currentTimeControlKey);
+    const whiteToken = room.playerSessions?.white?.sessionToken;
+    const blackToken = room.playerSessions?.black?.sessionToken;
+
+    if (!whiteToken || !blackToken) {
+        return { updated: false, reason: "Missing player session tokens" };
+    }
+
+    const whitePlayer = await getOrCreatePlayer(whiteToken, room.playerProfiles?.white?.name || "White");
+    const blackPlayer = await getOrCreatePlayer(blackToken, room.playerProfiles?.black?.name || "Black");
+
+    const whiteRating = (whitePlayer.ratings[category] && whitePlayer.ratings[category].current) || 1500;
+    const blackRating = (blackPlayer.ratings[category] && blackPlayer.ratings[category].current) || 1500;
+
+    const elo = calculateElo(whiteRating, blackRating, gameOverData.winner);
+
+    let outcomeWhite = "draw";
+    let outcomeBlack = "draw";
+    if (gameOverData.winner === "w") {
+        outcomeWhite = "win";
+        outcomeBlack = "loss";
+    } else if (gameOverData.winner === "b") {
+        outcomeWhite = "loss";
+        outcomeBlack = "win";
+    }
+
+    // Update White player
+    whitePlayer.ratings[category].current = elo.whiteNewRating;
+    whitePlayer.ratings[category].peak = Math.max(whitePlayer.ratings[category].peak || 1500, elo.whiteNewRating);
+    whitePlayer.ratings[category].games = (whitePlayer.ratings[category].games || 0) + 1;
+    if (outcomeWhite === "win") whitePlayer.ratings[category].wins = (whitePlayer.ratings[category].wins || 0) + 1;
+    else if (outcomeWhite === "loss") whitePlayer.ratings[category].losses = (whitePlayer.ratings[category].losses || 0) + 1;
+    else whitePlayer.ratings[category].draws = (whitePlayer.ratings[category].draws || 0) + 1;
+
+    whitePlayer.ratingHistory.push({
+        category,
+        ratingBefore: whiteRating,
+        ratingAfter: elo.whiteNewRating,
+        delta: elo.whiteDelta,
+        gameId: room.id,
+        opponent: blackPlayer.username,
+        outcome: outcomeWhite,
+        timestamp: new Date()
+    });
+    if (whitePlayer.save) await whitePlayer.save();
+
+    // Update Black player
+    blackPlayer.ratings[category].current = elo.blackNewRating;
+    blackPlayer.ratings[category].peak = Math.max(blackPlayer.ratings[category].peak || 1500, elo.blackNewRating);
+    blackPlayer.ratings[category].games = (blackPlayer.ratings[category].games || 0) + 1;
+    if (outcomeBlack === "win") blackPlayer.ratings[category].wins = (blackPlayer.ratings[category].wins || 0) + 1;
+    else if (outcomeBlack === "loss") blackPlayer.ratings[category].losses = (blackPlayer.ratings[category].losses || 0) + 1;
+    else blackPlayer.ratings[category].draws = (blackPlayer.ratings[category].draws || 0) + 1;
+
+    blackPlayer.ratingHistory.push({
+        category,
+        ratingBefore: blackRating,
+        ratingAfter: elo.blackNewRating,
+        delta: elo.blackDelta,
+        gameId: room.id,
+        opponent: whitePlayer.username,
+        outcome: outcomeBlack,
+        timestamp: new Date()
+    });
+    if (blackPlayer.save) await blackPlayer.save();
+
+    // Update room memory profiles
+    if (room.playerProfiles?.white) room.playerProfiles.white.rating = elo.whiteNewRating;
+    if (room.playerProfiles?.black) room.playerProfiles.black.rating = elo.blackNewRating;
+
+    // Update Game document in DB
+    if (isConnected) {
+        try {
+            await Game.updateOne(
+                { gameId: room.id },
+                {
+                    $set: {
+                        isRated: true,
+                        "whitePlayer.rating": elo.whiteNewRating,
+                        "blackPlayer.rating": elo.blackNewRating,
+                        ratingChanges: {
+                            white: elo.whiteDelta,
+                            black: elo.blackDelta
+                        }
+                    }
+                }
+            );
+        } catch (e) {
+            console.error(`[Database] Failed to record rating changes on game ${room.id}:`, e.message);
+        }
+    }
+
+    console.log(`[ELO] Processed ${category.toUpperCase()} rating update for game ${room.id}: White (${whitePlayer.username}) ${whiteRating} -> ${elo.whiteNewRating} (${elo.whiteDelta >= 0 ? "+" : ""}${elo.whiteDelta}), Black (${blackPlayer.username}) ${blackRating} -> ${elo.blackNewRating} (${elo.blackDelta >= 0 ? "+" : ""}${elo.blackDelta})`);
+
+    return {
+        updated: true,
+        category,
+        white: {
+            sessionToken: whiteToken,
+            username: whitePlayer.username,
+            oldRating: whiteRating,
+            newRating: elo.whiteNewRating,
+            delta: elo.whiteDelta,
+            outcome: outcomeWhite
+        },
+        black: {
+            sessionToken: blackToken,
+            username: blackPlayer.username,
+            oldRating: blackRating,
+            newRating: elo.blackNewRating,
+            delta: elo.blackDelta,
+            outcome: outcomeBlack
+        }
+    };
+}
+
 module.exports = {
     connectDB,
     syncActiveGame,
@@ -222,5 +443,12 @@ module.exports = {
     finalizeGame,
     getGameById,
     getRecentGames,
-    Game
+    getOrCreatePlayer,
+    getPlayerByIdentifier,
+    processGameRatings,
+    calculateElo,
+    validateRatedGame,
+    getRatingCategory,
+    Game,
+    Player
 };

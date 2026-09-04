@@ -59,6 +59,14 @@ const gameSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
+    isRated: {
+        type: Boolean,
+        default: true
+    },
+    ratingChanges: {
+        white: { type: Number, default: 0 },
+        black: { type: Number, default: 0 }
+    },
     result: {
         type: String,
         enum: ["1-0", "0-1", "1/2-1/2", "*"],

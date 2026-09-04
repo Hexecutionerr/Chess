@@ -149,6 +149,19 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **REST API Endpoints:**
     - `GET /api/games/:gameId`: Retrieve full match details, moves, and PGN
     - `GET /api/games`: Query recent matches with optional filters (`limit`, `status`, `timeControl`, `username`)
+- **Phase 14 Elo Rating Engine & Categories** — Official Elo rating calculation and category isolation:
+  - **Standard Elo Formula:** Standard FIDE logistic curve ($E = 1 / (1 + 10^{\Delta R / 400})$) with $K = 32$ for fair and competitive rating changes
+  - **Full Game Outcome Support:** Accurate rating recalculation on Win (1.0), Loss (0.0), and Draw (0.5)
+  - **Strict Rating Update Prevention:**
+    - Casual games (`isRated: false` or `casual: true`) do not modify ratings
+    - Aborted games (`status: "ABORTED"`, `type: "aborted"`) do not modify ratings
+    - Invalid games (< 2 moves played or self-play with matching session tokens) are rejected
+  - **Rating Categories:** Independent rating pools for **Bullet**, **Blitz**, **Rapid**, and **Classical**
+  - **Player Profile Persistence:** Dynamic MongoDB player profiles tracking current & peak ratings, match counts, wins, losses, draws, and historical progression
+  - **Interactive UI Feedback:** Post-match rating badges showing category, net change (`+16` / `-16`), and updated player ratings in game-over modal and profile cards
+  - **REST API Endpoints:**
+    - `GET /api/players/:identifier`: Fetch player stats and category ratings by username or sessionToken
+    - `POST /api/ratings/calculate`: Test and calculate Elo changes between two ratings for any outcome
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -259,19 +272,20 @@ move {from, to, promotion}        playerRole ("w"/"b")
 resign                            spectatorRole
 offerDraw / acceptDraw            gameState {fen, turn, isCheck, history, players, clocks}
 offerRematch / acceptRematch      playersUpdate {white, black}
-leaveGame                         move {from, to, san, captured, clocks, increment}
-newGame                           playerDisconnected {role, roleName}
-setTimeControl                    playerReconnected {role, roleName}
-identify {sessionToken}           reconnected {role, roleName}
-findMatch {timeControl, token}    matchmakingStarted {timeControl, label}
-cancelMatchmaking                 matchmakingCancelled
-createPrivateGame {tc, color}     privateGameCreated {roomId, inviteUrl, role, tc}
-joinPrivateGame {roomId, token}   privateGameJoined {roomId, role, isSpectator}
+leaveGame                         ratingUpdate {category, white, black}
+newGame                           move {from, to, san, captured, clocks, increment}
+setTimeControl                    playerDisconnected {role, roleName}
+identify {sessionToken}           playerReconnected {role, roleName}
+findMatch {timeControl, token}    reconnected {role, roleName}
+cancelMatchmaking                 matchmakingStarted {timeControl, label}
+createPrivateGame {tc, color}     matchmakingCancelled
+joinPrivateGame {roomId, token}   privateGameCreated {roomId, inviteUrl, role, tc}
+                                  privateGameJoined {roomId, role, isSpectator}
                                   privateGameReady {roomId, message, timeControl}
                                   privateGameError {message}
                                   unauthorizedAction {message}
                                   matchFound {role, opponent, timeControl}
-                                  gameOver {type, winner, message}
+                                  gameOver {type, winner, message, ratings}
                                   newGame {fen, turn, ...}
 ```
 
@@ -292,8 +306,10 @@ joinPrivateGame {roomId, token}   privateGameJoined {roomId, role, isSpectator}
 | **Phase 9** | Game Lobby & Matchmaking (Homepage Lobby, Time Control Selectors, Radar Search, Friendly Games, Puzzles, History, Profile) | ✅ Complete |
 | **Phase 10** | Private Games & Anti-Interference (Create Game, Shareable Invite Link, Join Game, Correct Roles, Spectator Lockout) | ✅ Complete |
 | **Phase 11** | ELO Leaderboards & Ranking Ladders | 📋 Planned |
+| **Phase 12** | Player Profile (Avatar, Stats, Win Rate, Rating History SVG Curve, Recent Matches) | ✅ Complete |
 | **Phase 13** | Game Database (MongoDB Persistence for Active & Completed Games, 15 Model Fields, Move History, PGN, Proper Indexes, REST APIs) | ✅ Complete |
-| **Phase 14** | AI Opponent (Stockfish), Game Review & Deep Analysis Board | 📋 Planned |
+| **Phase 14** | ELO Rating (Win/Loss/Draw Updates, Rating Categories, Casual/Aborted/Invalid Game Prevention, Live UI Badges) | ✅ Complete |
+| **Phase 15** | AI Opponent (Stockfish), Game Review & Deep Analysis Board | 📋 Planned |
 
 ---
 

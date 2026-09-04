@@ -3145,3 +3145,68 @@ html, body {
         display: none;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 14: ELO RATING BADGE & MODE SELECTOR STYLES
+   ═══════════════════════════════════════════════════════════════ */
+.modal-rating-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin: 4px auto 12px;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.rating-badge-category {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    background: rgba(96, 165, 250, 0.2);
+    color: #60a5fa;
+    border-radius: 4px;
+}
+
+.rating-badge-change {
+    font-size: 1.1rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.rating-badge-new {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+
+.btn-mode-pick {
+    flex: 1;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-mode-pick:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-white);
+}
+
+.btn-mode-pick.selected {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: #3b82f6;
+    color: #60a5fa;
+    font-weight: 700;
+}
+
