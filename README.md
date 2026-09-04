@@ -124,6 +124,31 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Recent Games Archive & Filtering:**
     - Filter tabs: `All`, `Rapid`, `Blitz`, `Bullet`, `Classical`
     - Displays outcome badges (`WIN`, `LOSS`, `DRAW`), opponent handle and rating, played color (`⚪ White` / `⚫ Black`), time control, termination reason, and rating change (+14, -9, etc.)
+- **Phase 13 Production Game Database & Persistence** — MongoDB & Mongoose persistence engine for active and completed matches:
+  - **Comprehensive Game Model:** Strictly supports all core game attributes:
+    - `gameId`: Unique indexed room identifier (e.g. `ARENA-9264`, `MATCH-XXXX`)
+    - `whitePlayer` & `blackPlayer`: Player profile snapshots (username, rating, sessionToken)
+    - `spectators`: Real-time array of connected observers
+    - `timeControl`: Base time and increment notation (e.g. `10+0`, `3+2`)
+    - `initialTime`: Base clock seconds (`600`, `180`, etc.)
+    - `increment`: Increment seconds per turn
+    - `moves`: Compact move history (`from`, `to`, `san`, `promotion`, `captured`, `color`, `timestamp`)
+    - `PGN`: Authoritative Portable Game Notation representation
+    - `result`: FIDE standard notation (`1-0`, `0-1`, `1/2-1/2`, `*`)
+    - `status`: Comprehensive match state (`WAITING`, `ACTIVE`, `CHECKMATE`, `TIMEOUT`, `RESIGNED`, `DRAW`, `STALEMATE`, `ABORTED`, `ABANDONMENT`, `FINISHED`)
+    - `winner`: Color identifier (`"w"`, `"b"`, or `null`)
+    - `startTime`: Recorded accurately on the first valid move
+    - `endTime`: Recorded on match completion
+    - `createdAt`: Match initiation timestamp
+  - **Clean State (No Duplicate Redundancy):** Eliminates redundant full board FEN strings on every move, retaining only SAN moves and authoritative PGN
+  - **High-Performance Indexes:**
+    - Unique index on `gameId`
+    - Recency index on `createdAt`
+    - Compound indexes on `whitePlayer.username + createdAt` and `blackPlayer.username + createdAt`
+    - Compound index on `status + timeControl + createdAt`
+  - **REST API Endpoints:**
+    - `GET /api/games/:gameId`: Retrieve full match details, moves, and PGN
+    - `GET /api/games`: Query recent matches with optional filters (`limit`, `status`, `timeControl`, `username`)
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -158,10 +183,10 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 |-------|-----------|
 | **Server** | Node.js, Express.js 5.x |
 | **Real-time** | Socket.IO 4.8 |
-| **Game Engine** | chess.js 1.4 (same version on client and server) |
-| **Templating** | EJS |
-| **Frontend** | Vanilla JavaScript (ES6+), HTML5 Drag & Drop API |
-| **Styling** | Custom CSS design system (Inter font, CSS custom properties) |
+| **Database** | MongoDB, Mongoose 8.x |
+| **Game Engine** | Chess.js 1.0.0-beta.6 (shared client/server) |
+| **Styling** | Vanilla CSS3 (Custom Design System, Dark Mode, Glassmorphism) |
+| **Icons & Pieces** | Chess.com / Lichess SVG Piece Set, FontAwesome 6 |
 | **Assets** | cburnett SVG pieces, Lichess sound effects |
 
 ---
@@ -267,8 +292,8 @@ joinPrivateGame {roomId, token}   privateGameJoined {roomId, role, isSpectator}
 | **Phase 9** | Game Lobby & Matchmaking (Homepage Lobby, Time Control Selectors, Radar Search, Friendly Games, Puzzles, History, Profile) | ✅ Complete |
 | **Phase 10** | Private Games & Anti-Interference (Create Game, Shareable Invite Link, Join Game, Correct Roles, Spectator Lockout) | ✅ Complete |
 | **Phase 11** | ELO Leaderboards & Ranking Ladders | 📋 Planned |
-| **Phase 12** | Player Profile & Separate Ratings (Avatar, Ratings, Games, Wins/Losses/Draws, Win Rate, Rating History SVG, Recent Games, Bullet/Blitz/Rapid/Classical) | ✅ Complete |
-| **Phase 13** | AI Opponent (Stockfish), Game Review & Deep Analysis Board | 📋 Planned |
+| **Phase 13** | Game Database (MongoDB Persistence for Active & Completed Games, 15 Model Fields, Move History, PGN, Proper Indexes, REST APIs) | ✅ Complete |
+| **Phase 14** | AI Opponent (Stockfish), Game Review & Deep Analysis Board | 📋 Planned |
 
 ---
 
