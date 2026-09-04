@@ -1515,6 +1515,8 @@ if (navLobby) navLobby.addEventListener("click", (e) => { e.preventDefault(); sh
 if (navPlay)  navPlay.addEventListener("click", (e) => { e.preventDefault(); showGame(); });
 if (navPuzzles) navPuzzles.addEventListener("click", (e) => { e.preventDefault(); openModal(puzzlesModal); });
 if (navHistory) navHistory.addEventListener("click", (e) => { e.preventDefault(); openModal(historyModal); });
+const navProfile = document.getElementById("navProfile");
+if (navProfile) navProfile.addEventListener("click", (e) => { e.preventDefault(); openModal(profileModal); });
 if (btnNavActiveGame) btnNavActiveGame.addEventListener("click", () => showGame());
 if (btnReturnToLobby) btnReturnToLobby.addEventListener("click", () => showLobby());
 const brandEl = document.querySelector(".brand");
@@ -1722,6 +1724,95 @@ if (btnSolvePuzzle) {
 
 if (btnCloseHistoryModal) btnCloseHistoryModal.addEventListener("click", () => closeModal(historyModal));
 if (btnCloseProfileModal) btnCloseProfileModal.addEventListener("click", () => closeModal(profileModal));
+
+// ─── Phase 12: Player Profile Logic ───────────────────────────
+const profileUsernameDisplay = document.getElementById("profileUsernameDisplay");
+const profileEditForm        = document.getElementById("profileEditForm");
+const profileUsernameInput   = document.getElementById("profileUsernameInput");
+const btnEditProfile         = document.getElementById("btnEditProfile");
+const btnSaveUsername        = document.getElementById("btnSaveUsername");
+const btnCancelEditName      = document.getElementById("btnCancelEditName");
+const myNavName              = document.getElementById("myNavName");
+const profileTcCards         = document.querySelectorAll(".tc-rating-card");
+const profileFilterTabs      = document.querySelectorAll(".btn-prof-tab");
+const recentGameCards        = document.querySelectorAll(".prof-game-card");
+
+// Initialize saved username
+let currentUsername = localStorage.getItem("chess_username") || "Magnus_G";
+function applyUsername(name) {
+    currentUsername = name;
+    if (profileUsernameDisplay) profileUsernameDisplay.textContent = name;
+    if (myNavName) myNavName.textContent = name;
+    if (playerName) playerName.textContent = name;
+}
+applyUsername(currentUsername);
+
+if (btnEditProfile) {
+    btnEditProfile.addEventListener("click", () => {
+        if (profileEditForm) {
+            profileEditForm.style.display = "flex";
+            if (profileUsernameInput) {
+                profileUsernameInput.value = currentUsername;
+                profileUsernameInput.focus();
+            }
+        }
+    });
+}
+
+if (btnCancelEditName) {
+    btnCancelEditName.addEventListener("click", () => {
+        if (profileEditForm) profileEditForm.style.display = "none";
+    });
+}
+
+if (btnSaveUsername) {
+    btnSaveUsername.addEventListener("click", () => {
+        const val = profileUsernameInput.value.trim();
+        if (val) {
+            localStorage.setItem("chess_username", val);
+            applyUsername(val);
+            if (profileEditForm) profileEditForm.style.display = "none";
+            showToast(`Profile updated: Username set to ${val}`);
+        }
+    });
+}
+
+// Category filter tabs for Recent Games
+profileFilterTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+        profileFilterTabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const filter = tab.dataset.filter;
+
+        recentGameCards.forEach(card => {
+            if (filter === "all" || card.dataset.tc === filter) {
+                card.style.display = "flex";
+            } else {
+                card.style.display = "none";
+            }
+        });
+    });
+});
+
+// Category rating cards click filters recent games as well
+profileTcCards.forEach(tcCard => {
+    tcCard.addEventListener("click", () => {
+        profileTcCards.forEach(c => c.classList.remove("active"));
+        tcCard.classList.add("active");
+        const tc = tcCard.dataset.tc;
+        profileFilterTabs.forEach(t => {
+            t.classList.toggle("active", t.dataset.filter === tc);
+        });
+        recentGameCards.forEach(card => {
+            if (card.dataset.tc === tc) {
+                card.style.display = "flex";
+            } else {
+                card.style.display = "none";
+            }
+        });
+        showToast(`Filtered profile to ${tc.toUpperCase()} games`);
+    });
+});
 
 // ─── Socket.IO Event Handlers ─────────────────────────────────
 

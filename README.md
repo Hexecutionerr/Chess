@@ -102,6 +102,28 @@ A polished, production-quality, real-time multiplayer chess platform built with 
     - Spectators are completely blocked from piece movements, drag-and-drop, resigning, draw offers, and resetting clocks
     - Explicit server-side validation strictly verifies socket identity against seated players, returning `unauthorizedAction` on any illicit action
     - Active game banner displays private room code, one-click copy button, and `👁️ Spectator Mode` status badge
+- **Phase 12 Professional Player Profile & Rating System** — Comprehensive player identity, rating categories, and match analytics:
+  - **Player Identity & Avatar:**
+    - High-res avatar circle with Grandmaster badge, online indicator, and initials
+    - Customizable username with inline edit form persisting to `localStorage`
+    - International title (`Grandmaster • 🌐 Global • Member since Sep 2024`)
+  - **Category Ratings (Separate Rating Systems):**
+    - 🚅 **Bullet Rating:** `1620` (Peak: `1685`, 62 games)
+    - ⚡ **Blitz Rating:** `1745` (Peak: `1790`, 118 games)
+    - ⏱️ **Rapid Rating:** `1850` (Peak: `1895`, 84 games) — Primary format
+    - 🏛️ **Classical Rating:** `1910` (Peak: `1940`, 20 games)
+    - Interactive category rating cards filter match history and display peak ratings
+  - **Performance Statistics:**
+    - **Total Games:** `284` | **Wins:** `165` (58.1%) | **Losses:** `87` (30.6%) | **Draws:** `32` (11.3%)
+    - **Win Rate:** `58.1%` with a 3-color segmented visual progress bar (Wins / Draws / Losses)
+    - Current form streak (`🔥 4 Wins`) and best victory record
+  - **Rating History Progression (SVG Vector Curve):**
+    - High-precision SVG line chart plotting recent rating progression across rated matches
+    - Gradient area fill beneath curve, horizontal grid lines, and interactive highlighted data points
+    - Summary badges: Min, Max, and overall net ELO gain (`+140 Overall`)
+  - **Recent Games Archive & Filtering:**
+    - Filter tabs: `All`, `Rapid`, `Blitz`, `Bullet`, `Classical`
+    - Displays outcome badges (`WIN`, `LOSS`, `DRAW`), opponent handle and rating, played color (`⚪ White` / `⚫ Black`), time control, termination reason, and rating change (+14, -9, etc.)
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -244,8 +266,9 @@ joinPrivateGame {roomId, token}   privateGameJoined {roomId, role, isSpectator}
 | **Phase 8** | Real-Time Reconnection (Persistent Session Tokens, Preserved Game State & Clocks, Resynchronization, Anti-Duplicate Architecture) | ✅ Complete |
 | **Phase 9** | Game Lobby & Matchmaking (Homepage Lobby, Time Control Selectors, Radar Search, Friendly Games, Puzzles, History, Profile) | ✅ Complete |
 | **Phase 10** | Private Games & Anti-Interference (Create Game, Shareable Invite Link, Join Game, Correct Roles, Spectator Lockout) | ✅ Complete |
-| **Phase 11** | ELO ratings, leaderboards, player profiles | 📋 Planned |
-| **Phase 12** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 11** | ELO Leaderboards & Ranking Ladders | 📋 Planned |
+| **Phase 12** | Player Profile & Separate Ratings (Avatar, Ratings, Games, Wins/Losses/Draws, Win Rate, Rating History SVG, Recent Games, Bullet/Blitz/Rapid/Classical) | ✅ Complete |
+| **Phase 13** | AI Opponent (Stockfish), Game Review & Deep Analysis Board | 📋 Planned |
 
 ---
 
