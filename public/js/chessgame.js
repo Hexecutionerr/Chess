@@ -16,6 +16,8 @@ let lastMove = null;            // { from, to } algebraic notation
 let isGameOver = false;
 let isFlipped = false;
 let moveHistory = [];
+let moveFens = [];              // Cached FEN strings: [startFen, afterMove0, afterMove1, ...]
+let viewingMoveIndex = null;    // null = LIVE; -1 = start position; 0..n-1 = historical move
 
 // ─── Clocks State (Server-Authoritative) ───────────────────────
 let clocks = {
@@ -66,6 +68,16 @@ const movesBody         = document.getElementById("movesBody");
 const movesTableWrap    = document.getElementById("movesTableWrap");
 const noMovesMsg        = document.getElementById("noMovesMsg");
 const moveCountBadge    = document.getElementById("moveCountBadge");
+
+// Navigation & Review Toolbar References
+const btnNavFirst       = document.getElementById("btnNavFirst");
+const btnNavPrev        = document.getElementById("btnNavPrev");
+const btnNavNext        = document.getElementById("btnNavNext");
+const btnNavLast        = document.getElementById("btnNavLast");
+const btnNavLive        = document.getElementById("btnNavLive");
+const reviewBanner      = document.getElementById("reviewBanner");
+const reviewStatusText  = document.getElementById("reviewStatusText");
+const btnExitReview     = document.getElementById("btnExitReview");
 
 const btnOfferDraw      = document.getElementById("btnOfferDraw");
 const btnResign         = document.getElementById("btnResign");
@@ -166,7 +178,7 @@ function updateClockDisplays() {
     if (playerClock) playerClock.textContent = formatClockTime(userMs);
     if (opponentClock) opponentClock.textContent = formatClockTime(oppMs);
 
-    // Low-time visual warnings:
+    // Multi-stage low-time visual warnings:
     // Warning: <= 30 seconds (amber)
     // Critical: <= 10 seconds (intense red pulse)
     const userTotalSec = userMs / 1000;
@@ -183,7 +195,6 @@ function updateClockDisplays() {
     }
 }
 
-// Local 50ms ticker to interpolate display smoothly between server broadcasts
 function startLocalClockTicker() {
     if (localClockTimer) return;
     localClockTimer = setInterval(() => {
@@ -218,13 +229,13 @@ function showIncrementBadge(color, amount) {
     if (badge) {
         badge.textContent = `+${amount}s`;
         badge.classList.remove("pop");
-        void badge.offsetWidth; // Force CSS reflow to re-trigger pop
+        void badge.offsetWidth;
         badge.classList.add("pop");
         setTimeout(() => badge.classList.remove("pop"), 1200);
     }
 }
 
-// Time control selection
+// Time control selector
 if (timeControlSelect) {
     timeControlSelect.addEventListener("change", () => {
         const val = timeControlSelect.value;
@@ -342,46 +353,138 @@ function updateCapturedPieces() {
     }
 }
 
-// ─── Move Notation Table ─────────────────────────────────────
+// ─── Rebuild Historical FEN Snapshots ─────────────────────────
+function rebuildMoveFens(history) {
+    const replayChess = new Chess();
+    moveFens = [replayChess.fen()];
+    (history || []).forEach(m => {
+        try {
+            replayChess.move({ from: m.from, to: m.to, promotion: m.promotion });
+            moveFens.push(replayChess.fen());
+        } catch (e) {
+            try {
+                replayChess.move(m.san || m);
+                moveFens.push(replayChess.fen());
+            } catch (err) {}
+        }
+    });
+}
+
+// ─── Historical Position Navigation (Phase 4) ─────────────────
+function navigateToMove(index) {
+    if (moveHistory.length === 0) return;
+
+    // -1 = Start position; moveHistory.length - 1 = live position
+    const clampedIndex = Math.max(-1, Math.min(index, moveHistory.length - 1));
+
+    if (clampedIndex === moveHistory.length - 1) {
+        returnToLive();
+        return;
+    }
+
+    viewingMoveIndex = clampedIndex;
+    renderBoard();
+    updateMoveHistoryUI();
+}
+
+function returnToLive() {
+    viewingMoveIndex = null;
+    selectedSquare = null;
+    currentLegalMoves = [];
+    renderBoard();
+    updateMoveHistoryUI();
+}
+
+// ─── Move Notation Table & History Panel UI ───────────────────
 function updateMoveHistory(history) {
     moveHistory = history || chess.history({ verbose: true });
+    rebuildMoveFens(moveHistory);
+    updateMoveHistoryUI();
+}
+
+function updateMoveHistoryUI() {
     movesBody.innerHTML = "";
 
     if (moveHistory.length === 0) {
         noMovesMsg.style.display = "flex";
         moveCountBadge.textContent = "0 moves";
+        if (btnNavFirst) btnNavFirst.disabled = true;
+        if (btnNavPrev) btnNavPrev.disabled = true;
+        if (btnNavNext) btnNavNext.disabled = true;
+        if (btnNavLast) btnNavLast.disabled = true;
+        if (btnNavLive) btnNavLive.classList.remove("active");
+        if (reviewBanner) reviewBanner.classList.remove("visible");
         return;
     }
 
     noMovesMsg.style.display = "none";
     moveCountBadge.textContent = `${moveHistory.length} moves`;
 
+    const isLive = (viewingMoveIndex === null || viewingMoveIndex === moveHistory.length - 1);
+    const activeIndex = isLive ? (moveHistory.length - 1) : viewingMoveIndex;
+
+    // Navigation buttons state
+    if (btnNavFirst) btnNavFirst.disabled = (activeIndex === -1);
+    if (btnNavPrev) btnNavPrev.disabled = (activeIndex <= -1);
+    if (btnNavNext) btnNavNext.disabled = isLive;
+    if (btnNavLast) btnNavLast.disabled = isLive;
+    if (btnNavLive) btnNavLive.classList.toggle("active", isLive);
+
+    // Review banner visibility and description
+    if (reviewBanner) {
+        if (!isLive) {
+            reviewBanner.classList.add("visible");
+            if (activeIndex === -1) {
+                reviewStatusText.textContent = "Viewing Starting Position";
+            } else {
+                const moveNum = Math.floor(activeIndex / 2) + 1;
+                const m = moveHistory[activeIndex];
+                const prefix = m.color === "w" ? `${moveNum}.` : `${moveNum}...`;
+                reviewStatusText.textContent = `Viewing ${prefix} ${m.san}`;
+            }
+        } else {
+            reviewBanner.classList.remove("visible");
+        }
+    }
+
+    // Build SAN notation table: 1. e4 e5
     for (let i = 0; i < moveHistory.length; i += 2) {
         const moveNum = Math.floor(i / 2) + 1;
         const whiteMove = moveHistory[i];
         const blackMove = moveHistory[i + 1];
 
         const row = document.createElement("tr");
-        if (i === moveHistory.length - 1 || i + 1 === moveHistory.length - 1) {
-            row.classList.add("latest-row");
-        }
 
         const tdNum = document.createElement("td");
         tdNum.className = "move-num";
         tdNum.textContent = `${moveNum}.`;
 
+        // White Move Cell
         const tdWhite = document.createElement("td");
         tdWhite.className = "move-san";
         tdWhite.textContent = whiteMove ? whiteMove.san : "";
-        if (i === moveHistory.length - 1) {
-            tdWhite.classList.add("active-san");
+        tdWhite.title = `Move ${moveNum}: White played ${whiteMove ? whiteMove.san : ""}`;
+
+        if (i === activeIndex) {
+            tdWhite.classList.add(isLive ? "active-san" : "viewing-san");
         }
 
+        tdWhite.addEventListener("click", () => {
+            navigateToMove(i);
+        });
+
+        // Black Move Cell
         const tdBlack = document.createElement("td");
         tdBlack.className = "move-san";
         tdBlack.textContent = blackMove ? blackMove.san : "";
-        if (i + 1 === moveHistory.length - 1) {
-            tdBlack.classList.add("active-san");
+        if (blackMove) {
+            tdBlack.title = `Move ${moveNum}: Black played ${blackMove.san}`;
+            if (i + 1 === activeIndex) {
+                tdBlack.classList.add(isLive ? "active-san" : "viewing-san");
+            }
+            tdBlack.addEventListener("click", () => {
+                navigateToMove(i + 1);
+            });
         }
 
         row.appendChild(tdNum);
@@ -390,8 +493,46 @@ function updateMoveHistory(history) {
         movesBody.appendChild(row);
     }
 
-    movesTableWrap.scrollTop = movesTableWrap.scrollHeight;
+    // Auto-scroll to active or viewed move
+    const targetCell = movesBody.querySelector(".active-san, .viewing-san");
+    if (targetCell) {
+        targetCell.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
 }
+
+// ─── History Navigation Button Listeners ──────────────────────
+if (btnNavFirst) btnNavFirst.addEventListener("click", () => navigateToMove(-1));
+if (btnNavPrev) btnNavPrev.addEventListener("click", () => {
+    const currentIdx = (viewingMoveIndex === null) ? (moveHistory.length - 1) : viewingMoveIndex;
+    navigateToMove(currentIdx - 1);
+});
+if (btnNavNext) btnNavNext.addEventListener("click", () => {
+    const currentIdx = (viewingMoveIndex === null) ? (moveHistory.length - 1) : viewingMoveIndex;
+    navigateToMove(currentIdx + 1);
+});
+if (btnNavLast) btnNavLast.addEventListener("click", () => returnToLive());
+if (btnNavLive) btnNavLive.addEventListener("click", () => returnToLive());
+if (btnExitReview) btnExitReview.addEventListener("click", () => returnToLive());
+
+// Keyboard Arrow Navigation (Left = Prev, Right = Next, Up = Start, Down = Live)
+window.addEventListener("keydown", (e) => {
+    if (document.activeElement === chatInput) return;
+    if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const currentIdx = (viewingMoveIndex === null) ? (moveHistory.length - 1) : viewingMoveIndex;
+        navigateToMove(currentIdx - 1);
+    } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const currentIdx = (viewingMoveIndex === null) ? (moveHistory.length - 1) : viewingMoveIndex;
+        navigateToMove(currentIdx + 1);
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        navigateToMove(-1);
+    } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        returnToLive();
+    }
+});
 
 // ─── Turn Indicators & Status Pill ───────────────────────────
 function updateTurnIndicators() {
@@ -544,12 +685,41 @@ const handleMove = (source, target, legalMove) => {
     updateClockDisplays();
 };
 
-// ─── Board Rendering ─────────────────────────────────────────
+// ─── Board Rendering (Supports Historical Position Review) ────
 const renderBoard = () => {
-    const board = chess.board();
+    const isLive = (viewingMoveIndex === null || viewingMoveIndex === moveHistory.length - 1);
+
+    // Determine board position to display
+    let displayBoard;
+    let displayTurn;
+    let displayCheck;
+    let displayLastMove = lastMove;
+
+    if (isLive) {
+        displayBoard = chess.board();
+        displayTurn = chess.turn();
+        displayCheck = chess.isCheck();
+    } else {
+        const tempChess = new Chess();
+        const targetFen = moveFens[viewingMoveIndex + 1] || tempChess.fen();
+        tempChess.load(targetFen);
+        displayBoard = tempChess.board();
+        displayTurn = tempChess.turn();
+        displayCheck = tempChess.isCheck();
+
+        if (viewingMoveIndex >= 0 && moveHistory[viewingMoveIndex]) {
+            displayLastMove = {
+                from: moveHistory[viewingMoveIndex].from,
+                to: moveHistory[viewingMoveIndex].to
+            };
+        } else {
+            displayLastMove = null;
+        }
+    }
+
     boardElement.innerHTML = "";
 
-    board.forEach((row, rowindex) => {
+    displayBoard.forEach((row, rowindex) => {
         row.forEach((square, squareindex) => {
             const squareElement = document.createElement("div");
             const isLight = (rowindex + squareindex) % 2 === 0;
@@ -558,15 +728,15 @@ const renderBoard = () => {
             squareElement.dataset.col = squareindex;
 
             // Last-move highlighting
-            if (lastMove) {
+            if (displayLastMove) {
                 const algebraic = toAlgebraic(rowindex, squareindex);
-                if (algebraic === lastMove.from || algebraic === lastMove.to) {
+                if (algebraic === displayLastMove.from || algebraic === displayLastMove.to) {
                     squareElement.classList.add("last-move");
                 }
             }
 
             // Check highlighting on king
-            if (chess.isCheck() && square && square.type === "k" && square.color === chess.turn()) {
+            if (displayCheck && square && square.type === "k" && square.color === displayTurn) {
                 squareElement.classList.add("in-check");
             }
 
@@ -576,13 +746,21 @@ const renderBoard = () => {
                 pieceElement.classList.add("piece");
                 pieceElement.style.backgroundImage = `url('${getPieceImage(square)}')`;
 
-                const canDrag = !isGameOver && playerRole === square.color && chess.turn() === playerRole;
+                // Pieces are only draggable in LIVE mode when it's player's turn
+                const canDrag = isLive && !isGameOver && playerRole === square.color && chess.turn() === playerRole;
                 pieceElement.draggable = canDrag;
                 if (canDrag) pieceElement.classList.add("draggable");
 
                 // Click on piece
                 pieceElement.addEventListener("click", (e) => {
                     e.stopPropagation();
+                    if (!isLive) {
+                        // Clicking a piece in review mode returns to live position
+                        returnToLive();
+                        showToast("Returned to live position");
+                        return;
+                    }
+
                     if (isGameOver) return;
 
                     if (playerRole === square.color) {
@@ -617,6 +795,11 @@ const renderBoard = () => {
 
             // Click on square
             squareElement.addEventListener("click", () => {
+                if (!isLive) {
+                    returnToLive();
+                    return;
+                }
+
                 if (isGameOver) return;
 
                 if (selectedSquare) {
@@ -633,7 +816,7 @@ const renderBoard = () => {
             // Drop
             squareElement.addEventListener("drop", (e) => {
                 e.preventDefault();
-                if (draggedPiece && sourceSquare) {
+                if (isLive && draggedPiece && sourceSquare) {
                     const targetSquare = {
                         row: parseInt(squareElement.dataset.row),
                         col: parseInt(squareElement.dataset.col),
@@ -646,7 +829,7 @@ const renderBoard = () => {
         });
     });
 
-    if (selectedSquare) {
+    if (isLive && selectedSquare) {
         highlightValidMoves(selectedSquare);
     }
 
@@ -838,6 +1021,8 @@ socket.on("gameState", (state) => {
     lastMove = null;
     selectedSquare = null;
     currentLegalMoves = [];
+    viewingMoveIndex = null;
+
     if (state.history && state.history.length > 0) {
         const last = state.history[state.history.length - 1];
         lastMove = { from: last.from, to: last.to };
@@ -874,7 +1059,7 @@ socket.on("playersUpdate", (playersData) => {
     updatePlayerInfo(playersData);
 });
 
-// Server authoritative periodic clock sync (anti-drift, anti-cheat)
+// Server authoritative periodic clock sync
 socket.on("clockSync", (clockData) => {
     syncServerClocks(clockData);
 });
@@ -912,8 +1097,15 @@ socket.on("move", (moveData) => {
         playSound("move");
     }
 
+    // Update history
     updateMoveHistory(moveData.history);
-    renderBoard();
+
+    // If the user was in historical review mode, notify them with a toast
+    if (viewingMoveIndex !== null) {
+        showToast(`Move played: ${moveData.san}`);
+    } else {
+        renderBoard();
+    }
 });
 
 // Draw offer
@@ -958,6 +1150,7 @@ socket.on("newGame", (state) => {
     lastMove = null;
     selectedSquare = null;
     currentLegalMoves = [];
+    viewingMoveIndex = null;
     chess.load(state.fen);
     if (state.clocks) {
         syncServerClocks(state.clocks);

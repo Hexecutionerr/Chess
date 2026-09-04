@@ -120,6 +120,11 @@
                     <div class="rank-labels" id="rankLabels"></div>
                     <div class="chessboard" id="chessboard"></div>
                     <div class="file-labels" id="fileLabels"></div>
+                    <!-- Historical Review Floating Banner -->
+                    <div class="review-status-banner" id="reviewBanner">
+                        <span class="review-status-text" id="reviewStatusText">Viewing move #1</span>
+                        <button class="btn-exit-review" id="btnExitReview">Return to Live ➔</button>
+                    </div>
                 </div>
 
                 <!-- User Player Strip -->
@@ -239,6 +244,16 @@
                         <div class="no-moves-placeholder" id="noMovesMsg">
                             <span>Game in progress. Moves will record here.</span>
                         </div>
+                    </div>
+                    <!-- Move History Review Controls -->
+                    <div class="moves-nav-bar">
+                        <button class="nav-step-btn" id="btnNavFirst" title="Start Position (First)">⏮</button>
+                        <button class="nav-step-btn" id="btnNavPrev" title="Previous Move (Left Arrow)">◀</button>
+                        <button class="nav-step-btn" id="btnNavNext" title="Next Move (Right Arrow)">▶</button>
+                        <button class="nav-step-btn" id="btnNavLast" title="Latest Move">⏭</button>
+                        <button class="nav-live-btn active" id="btnNavLive" title="Return to Live Position">
+                            <span class="live-dot"></span> LIVE
+                        </button>
                     </div>
                 </div>
 

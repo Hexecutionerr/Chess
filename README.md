@@ -42,6 +42,13 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Multi-Stage Low-Time Warnings:** Visual amber pulse (`< 30s`) and critical red glowing alert (`< 10s`)
   - **Sub-Second Precision Display:** Millisecond tenths display (`0:09.4`) under 20 seconds
   - **Disconnect / Reconnect Persistence:** Full clock snapshot synchronized immediately upon reconnecting
+- **Phase 4 Move History & Interactive Review** — Comprehensive algebraic move notation with live position review:
+  - **Move Numbers & Clean SAN Notation:** Clean numbered 2-column table (`1. e4 e5`, `2. Nf3 Nc6`) with complete Standard Algebraic Notation including check (`+`), checkmate (`#`), promotion (`=Q`), and castling (`O-O`, `O-O-O`)
+  - **Interactive Board Scrubbing:** Click any past move cell to instantly display that exact historical board position
+  - **Navigation Toolbar & Hotkeys:** Step forward/backward through moves using navigation buttons (`<<`, `<`, `>`, `>>`, `LIVE`) or keyboard arrows (`←`, `→`, `↑`, `↓`)
+  - **Floating Review Banner:** Prominent on-board status badge showing current historical move with one-click return to live
+  - **Non-Breaking Live Gameplay:** Background live match synchronization continues uninterrupted during position review; clicking any piece or clicking "LIVE" snaps back to live game instantly
+  - **Auto-Scrolling:** Moves table automatically scrolls to keep active or viewed moves in view
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Draw Offers** — In-game draw offer protocol with mutual consent confirmation
@@ -60,7 +67,7 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 - **Dual Player Strips** — Opponent & Player cards with avatars, ratings, online indicators, and active turn pulses
 - **Live Chess Clocks** — High-legibility monospaced digital timers with active glowing states
 - **Material Evaluation & Captured Trays** — Visual trays of captured pieces with real-time material lead calculations (+1, +2, etc.)
-- **Algebraic Move Notation Panel** — Two-column moves table (`#`, `White`, `Black`) with active-move highlighting and auto-scroll
+- **Algebraic Move Notation Panel** — Two-column moves table (`#`, `White`, `Black`) with active-move highlighting, history navigation buttons, and auto-scroll
 - **Action Control Toolbar** — Integrated Draw, Resign, Flip, and New Game controls
 - **SVG Chess Pieces** — High-quality cburnett piece set with smooth drag-and-drop & click-to-move
 - **Highlights & Indicators** — Last-move highlight, check glow, legal move dots, and capture target rings
@@ -89,18 +96,18 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 ChessArena/
 ├── public/
 │   ├── css/
-│   │   └── styles.css          # Design system — tokens, board, layout, modal, responsive
+│   │   └── styles.css          # Design system — tokens, board, layout, history nav, modal, responsive
 │   ├── img/
 │   │   └── pieces/             # 12 SVG chess pieces (wP, wR, wN, wB, wQ, wK, bP, bR, bN, bB, bQ, bK)
 │   ├── js/
 │   │   ├── chess-shim.js       # CJS-to-browser shim for chess.js
-│   │   └── chessgame.js        # Client game engine — rendering, input, sockets, sounds, UI
+│   │   └── chessgame.js        # Client game engine — rendering, history scrubber, sockets, sounds, UI
 │   └── sounds/
 │       ├── Move.mp3            # Piece movement sound
 │       ├── Capture.mp3         # Piece capture sound
 │       └── GenericNotify.mp3   # Game event notification sound
 ├── views/
-│   └── index.ejs               # Main page — header, player bars, board, controls, modal
+│   └── index.ejs               # Main page — header, player bars, board, history panel, controls, modal
 ├── screenshots/
 │   ├── board-white.png         # White player perspective screenshot
 │   └── gameplay.png            # Black player perspective screenshot
@@ -166,9 +173,10 @@ newGame                      gameState {fen, turn, isCheck, history}
 | **Phase 1** | Professional UI, Complete Desktop Layout (Navbar, Clocks, Moves, Captured, Chat, Controls) | ✅ Complete |
 | **Phase 2** | Chess Move Experience (Dynamic Legal Moves, Selection Switching, Dots, Rings, Pins, Castling, En Passant) | ✅ Complete |
 | **Phase 3** | Professional Chess Clocks (1+0 to 30+0, Increments, Server Authority, Anti-Cheat, Sub-Second Decimals, Timeout Detection) | ✅ Complete |
-| **Phase 4** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
-| **Phase 5** | ELO ratings, leaderboards, game history, player profiles | 📋 Planned |
-| **Phase 6** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 4** | Professional Move History (SAN Notation, Historical Position Review, Navigation Toolbar, Keyboard Controls, Non-Breaking Live Gameplay) | ✅ Complete |
+| **Phase 5** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 6** | ELO ratings, leaderboards, player profiles | 📋 Planned |
+| **Phase 7** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 

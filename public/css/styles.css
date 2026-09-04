@@ -946,13 +946,28 @@ html, body {
     width: 37.5%;
     font-weight: 600;
     color: var(--text-white);
-    cursor: default;
+    cursor: pointer;
     border-radius: 4px;
+    transition: all 0.15s ease;
+    user-select: none;
 }
 
-.moves-table tr.latest-row td.move-san.active-san {
-    background: rgba(16, 185, 129, 0.18);
-    color: var(--accent-emerald);
+.moves-table td.move-san:hover {
+    background: var(--bg-hover);
+    color: #60a5fa;
+}
+
+.moves-table td.move-san.active-san {
+    background: rgba(16, 185, 129, 0.2) !important;
+    color: var(--accent-emerald) !important;
+    font-weight: 700;
+}
+
+.moves-table td.move-san.viewing-san {
+    background: rgba(59, 130, 246, 0.3) !important;
+    color: #93c5fd !important;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.35);
+    font-weight: 700;
 }
 
 .no-moves-placeholder {
@@ -963,6 +978,136 @@ html, body {
     font-size: 0.78rem;
     color: var(--text-muted);
     text-align: center;
+}
+
+/* History Navigation Bar */
+.moves-nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--bg-deep);
+    border-top: 1px solid var(--border-subtle);
+    gap: 6px;
+}
+
+.nav-step-btn {
+    flex: 1;
+    padding: 6px 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-step-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-white);
+    border-color: var(--border-medium);
+}
+
+.nav-step-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.nav-live-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    letter-spacing: 0.05em;
+}
+
+.nav-live-btn .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.nav-live-btn.active {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.nav-live-btn.active .live-dot {
+    background: #ef4444;
+    box-shadow: 0 0 6px #ef4444;
+    animation: livePulse 1.5s infinite;
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Historical Review Overlay Banner */
+.review-status-banner {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(16, 20, 29, 0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    color: var(--text-white);
+    z-index: 25;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.review-status-banner.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.review-status-text {
+    color: #93c5fd;
+    font-weight: 600;
+}
+
+.btn-exit-review {
+    background: var(--accent-emerald);
+    border: none;
+    color: #000;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-exit-review:hover {
+    background: #059669;
+    color: white;
 }
 
 /* 3. Interactions Card (Controls & Chat) */
