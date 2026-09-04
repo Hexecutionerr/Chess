@@ -1,188 +1,111 @@
-<!-- <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <style>
-        .chessboard {
-            display: grid;
-            grid-template-columns: repeat(8, minmax(0, 1fr));
-            grid-template-rows: repeat(8, minmax(0, 1fr));
-            width: 400px;
-            height: 400px;
-            transform: rotate(0deg);
-        }
-
-        .piece.white {
-            color: white;
-            filter: drop-shadow(0 0 2px rgba(0, 0, 0, 1));
-        }
-
-        .piece.black {
-            color: black;
-        }
-
-        .flipped {
-            transform: rotate(180deg);
-        }
-
-        .square {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .square.light {
-            background-color: #f0d9b5;
-        }
-
-        .square.dark {
-            background-color: #b58863;
-        }
-
-        .piece {
-            font-size: 36px;
-            cursor: pointer;
-        }
-
-        .piece.draggable {
-            cursor: grab;
-        }
-
-        .dragging {
-            opacity: 0.5;
-        }
-
-        /* Rotate pieces for black player */
-        .flipped .piece {
-            transform: rotate(180deg);
-        }
-    </style>
-</head>
-<body>
-    <div class="w-full h-screen flex items-center justify-center bg-zinc-900">
-        <div class="chessboard w-96 h-96 bg-red-800"></div>
-    </div>
-
-    <script
-     src="https://cdn.socket.io/4.8.1/socket.io.min.js" 
-     integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
-     crossorigin="anonymous">
-    </script>
-
-    <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js" 
-    integrity="sha512-xRllwz2gdZciIB+AkEbeq+gVhX8VB8XsfqeFbUh+SzHlN96dEduwtTuVuc2u9EROlmW9+yhRlxjif66ORpsgVA==" 
-    crossorigin="anonymous" 
-    referrerpolicy="no-referrer">
-    </script>
-
-    <script src="/js/chessgame.js"></script>
-</body>
-</html> 
-
-
- -->
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title><%= title %></title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .chessboard {
-            display: grid;
-            grid-template-columns: repeat(8, minmax(0, 1fr));
-            grid-template-rows: repeat(8, minmax(0, 1fr));
-            width: 400px;
-            height: 400px;
-            transform: rotate(0deg);
-        }
-
-        .piece.white {
-            color: white;
-            filter: drop-shadow(0 0 2px rgba(0, 0, 0, 1));
-        }
-
-        .piece.black {
-            color: black;
-        }
-
-        .flipped {
-            transform: rotate(180deg);
-        }
-
-        .square {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background-color 0.2s ease;
-            cursor: pointer;
-        }
-
-        .square.light {
-            background-color: #f0d9b5;
-        }
-
-        .square.dark {
-            background-color: #b58863;
-        }
-
-        .piece {
-            font-size: 36px;
-            cursor: pointer;
-            user-select: none;
-            z-index: 10;
-        }
-
-        .piece.draggable {
-            cursor: grab;
-        }
-
-        .piece:active {
-            cursor: grabbing;
-        }
-
-        .dragging {
-            opacity: 0.5;
-        }
-
-        /* Rotate pieces for black player */
-        .flipped .piece {
-            transform: rotate(180deg);
-        }
-
-        /* Hover effect on pieces */
-        .piece:hover {
-            transform: scale(1.1);
-            transition: transform 0.1s ease;
-        }
-
-        .flipped .piece:hover {
-            transform: rotate(180deg) scale(1.1);
-        }
-    </style>
+    <meta name="description" content="Play chess online in real-time. Drag-and-drop or click to move. Multiplayer with spectator support.">
+    <link rel="stylesheet" href="/css/styles.css">
+    <!-- Preload piece images for instant rendering -->
+    <link rel="preload" href="/img/pieces/wK.svg" as="image">
+    <link rel="preload" href="/img/pieces/bK.svg" as="image">
 </head>
 <body>
-    <div class="w-full h-screen flex items-center justify-center bg-zinc-900">
-        <div class="chessboard"></div>
+    <div class="app">
+        <!-- ─── Header ─────────────────────────────────────── -->
+        <header class="header">
+            <div class="header-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L9 7H6l-1 4h2l-2 8h14l-2-8h2l-1-4h-3L12 2z" fill="var(--accent-primary)" stroke="var(--accent-primary)"/>
+                </svg>
+                <h1>Chess<span>Arena</span></h1>
+            </div>
+            <div class="header-status">
+                <div class="status-dot" id="connectionDot"></div>
+                <span id="connectionText">Connected</span>
+            </div>
+        </header>
+
+        <!-- ─── Game Area ──────────────────────────────────── -->
+        <main class="game-area">
+            <div class="game-container">
+                <!-- Opponent Bar (top) -->
+                <div class="player-bar top" id="opponentBar">
+                    <div class="player-info">
+                        <div class="player-color-icon" id="opponentIcon">♚</div>
+                        <div class="player-details">
+                            <div class="player-name" id="opponentName">Opponent</div>
+                            <div class="player-label" id="opponentLabel">Waiting...</div>
+                        </div>
+                    </div>
+                    <div class="turn-badge">
+                        <div class="turn-badge-dot"></div>
+                        TURN
+                    </div>
+                </div>
+
+                <!-- Board with Rank/File Labels -->
+                <div class="board-wrapper" id="boardWrapper">
+                    <div class="rank-labels" id="rankLabels"></div>
+                    <div class="chessboard" id="chessboard"></div>
+                    <div class="file-labels" id="fileLabels"></div>
+                </div>
+
+                <!-- Player Bar (bottom) -->
+                <div class="player-bar bottom" id="playerBar">
+                    <div class="player-info">
+                        <div class="player-color-icon" id="playerIcon">♔</div>
+                        <div class="player-details">
+                            <div class="player-name" id="playerName">You</div>
+                            <div class="player-label" id="playerLabel">Connecting...</div>
+                        </div>
+                    </div>
+                    <div class="turn-badge">
+                        <div class="turn-badge-dot"></div>
+                        TURN
+                    </div>
+                </div>
+
+                <!-- Game Controls -->
+                <div class="game-controls" id="gameControls">
+                    <button class="btn btn-resign" id="btnResign" disabled>
+                        ⚑ Resign
+                    </button>
+                </div>
+            </div>
+        </main>
     </div>
 
+    <!-- ─── Game Over Modal ────────────────────────────────── -->
+    <div class="modal-overlay" id="gameOverModal">
+        <div class="modal">
+            <div class="modal-icon" id="modalIcon">♔</div>
+            <div class="modal-title" id="modalTitle">Game Over</div>
+            <div class="modal-message" id="modalMessage">Result details</div>
+            <div class="modal-actions">
+                <button class="btn btn-newgame" id="btnNewGame">♟ New Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Toast ──────────────────────────────────────────── -->
+    <div class="toast" id="toast"></div>
+
+    <!-- ─── Scripts ────────────────────────────────────────── -->
     <script
-     src="https://cdn.socket.io/4.8.1/socket.io.min.js" 
-     integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
-     crossorigin="anonymous">
+        src="https://cdn.socket.io/4.8.1/socket.io.min.js"
+        integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
+        crossorigin="anonymous">
     </script>
 
-    <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js" 
-    integrity="sha512-xRllwz2gdZciIB+AkEbeq+gVhX8VB8XsfqeFbUh+SzHlN96dEduwtTuVuc2u9EROlmW9+yhRlxjif66ORpsgVA==" 
-    crossorigin="anonymous" 
-    referrerpolicy="no-referrer">
+    <!-- chess.js served from node_modules — same version as server -->
+    <script src="/js/chess-shim.js"></script>
+    <script src="/vendor/chess.js/chess.js"></script>
+    <script>
+        // Extract Chess constructor from CJS exports into global scope
+        if (typeof Chess === 'undefined' && typeof exports !== 'undefined' && exports.Chess) {
+            window.Chess = exports.Chess;
+        }
     </script>
 
     <script src="/js/chessgame.js"></script>
