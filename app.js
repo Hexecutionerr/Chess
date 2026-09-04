@@ -65,6 +65,7 @@ let lastSyncTimestamp = 0;
 let drawOffer = null; // 'w' or 'b'
 let rematchOffer = null; // 'w' or 'b'
 let chatMessages = [];
+let matchmakingQueue = []; // { socketId, sessionToken, timeControl, enqueuedAt }
 
 // ─── Authoritative Clock Management ───────────────────────────
 function getClockSnapshot() {
@@ -437,6 +438,98 @@ io.on("connection", function (uniquesocket) {
                 }
             }, graceMs);
         }
+
+        // Clean up from matchmaking queue if waiting
+        matchmakingQueue = matchmakingQueue.filter(q => q.socketId !== uniquesocket.id);
+    });
+
+    // ── Matchmaking System (Phase 9) ──────────────────────────
+    uniquesocket.on("findMatch", (data) => {
+        const tcKey = (data && data.timeControl && TIME_CONTROLS[data.timeControl]) ? data.timeControl : "10+0";
+        const token = (data && data.sessionToken) || ("sess_" + uniquesocket.id);
+
+        // Remove any prior queue entries for this socket/token
+        matchmakingQueue = matchmakingQueue.filter(q => q.socketId !== uniquesocket.id && q.sessionToken !== token);
+
+        // Check if there is an opponent waiting in queue for the same time control
+        const oppIdx = matchmakingQueue.findIndex(q => q.sessionToken !== token && q.socketId !== uniquesocket.id && q.timeControl === tcKey);
+
+        if (oppIdx !== -1) {
+            const matchedOpponent = matchmakingQueue.splice(oppIdx, 1)[0];
+            const oppSocket = io.sockets.sockets.get(matchedOpponent.socketId);
+
+            currentTimeControlKey = tcKey;
+            chess = new Chess();
+            isGameOverState = false;
+            resetClocks();
+            drawOffer = null;
+            rematchOffer = null;
+
+            // Assign White to waiting opponent, Black to current player
+            playerSessions.white = {
+                sessionToken: matchedOpponent.sessionToken,
+                socketId: matchedOpponent.socketId,
+                connected: true,
+                disconnectedAt: null,
+                disconnectTimeout: null
+            };
+            playerSessions.black = {
+                sessionToken: token,
+                socketId: uniquesocket.id,
+                connected: true,
+                disconnectedAt: null,
+                disconnectTimeout: null
+            };
+
+            players.white = matchedOpponent.socketId;
+            players.black = uniquesocket.id;
+
+            if (oppSocket) {
+                oppSocket.emit("playerRole", "w");
+                oppSocket.emit("matchFound", {
+                    role: "w",
+                    opponent: playerProfiles.black,
+                    timeControl: TIME_CONTROLS[tcKey]
+                });
+            }
+
+            uniquesocket.emit("playerRole", "b");
+            uniquesocket.emit("matchFound", {
+                role: "b",
+                opponent: playerProfiles.white,
+                timeControl: TIME_CONTROLS[tcKey]
+            });
+
+            io.emit("playersUpdate", getPlayersSnapshot());
+            io.emit("newGame", getGameState());
+            io.emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: `Match found! White: ${playerProfiles.white.name} vs. Black: ${playerProfiles.black.name} (${TIME_CONTROLS[tcKey].label})`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            console.log(`[matchmaking] Paired ${matchedOpponent.socketId} (w) with ${uniquesocket.id} (b) for ${tcKey}`);
+        } else {
+            // Queue current player
+            matchmakingQueue.push({
+                socketId: uniquesocket.id,
+                sessionToken: token,
+                timeControl: tcKey,
+                enqueuedAt: Date.now()
+            });
+
+            uniquesocket.emit("matchmakingStarted", {
+                timeControl: tcKey,
+                label: TIME_CONTROLS[tcKey].label
+            });
+            console.log(`[matchmaking] Socket ${uniquesocket.id} queued for ${tcKey}. Queue size: ${matchmakingQueue.length}`);
+        }
+    });
+
+    uniquesocket.on("cancelMatchmaking", () => {
+        matchmakingQueue = matchmakingQueue.filter(q => q.socketId !== uniquesocket.id);
+        uniquesocket.emit("matchmakingCancelled");
+        console.log(`[matchmaking] Socket ${uniquesocket.id} cancelled search.`);
     });
 
     // ── Set Time Control ──────────────────────────────────────

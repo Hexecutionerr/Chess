@@ -26,42 +26,45 @@
                 </a>
 
                 <nav class="nav-links">
-                    <a href="#" class="nav-item active" title="Play Chess">
+                    <a href="#" class="nav-item active" id="navLobby" title="Home Lobby">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                        </svg>
+                        <span>Home</span>
+                    </a>
+                    <a href="#" class="nav-item" id="navPlay" title="Play Board">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H7v-4h4v4zm0-6H7V7h4v4zm6 6h-4v-4h4v4zm0-6h-4V7h4v4z"/>
                         </svg>
                         <span>Play</span>
                     </a>
-                    <a href="#" class="nav-item" title="Daily Puzzles">
+                    <a href="#" class="nav-item" id="navPuzzles" title="Daily Puzzles">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
                         </svg>
                         <span>Puzzles</span>
                     </a>
-                    <a href="#" class="nav-item" title="Lessons & Openings">
-                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-                        </svg>
-                        <span>Learn</span>
-                    </a>
-                    <a href="#" class="nav-item" title="Watch Grandmaster Games">
+                    <a href="#" class="nav-item" id="navHistory" title="Game History">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"/>
-                            <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+                            <polyline points="12 6 12 12 16 14"/>
                         </svg>
-                        <span>Watch</span>
+                        <span>History</span>
                     </a>
                 </nav>
             </div>
 
             <div class="navbar-right">
+                <button class="btn-nav-active-game" id="btnNavActiveGame" style="display: none;" title="Return to ongoing match">
+                    <span class="active-game-dot"></span> Active Match ➔
+                </button>
+
                 <div class="connection-status" id="connectionPill">
                     <span class="status-indicator-dot" id="connectionDot"></span>
                     <span class="status-indicator-text" id="connectionText">Connected</span>
                 </div>
 
-                <div class="user-menu" id="userMenu">
+                <div class="user-menu" id="userMenu" title="View Profile & Stats">
                     <div class="user-avatar" id="myNavAvatar">
                         <span>GM</span>
                     </div>
@@ -76,8 +79,212 @@
             </div>
         </header>
 
+        <!-- ─── HOMEPAGE & LOBBY VIEW (PHASE 9) ────────────────────── -->
+        <section class="lobby-view" id="lobbyView">
+            <div class="lobby-container">
+                <!-- Hero Header -->
+                <div class="lobby-hero">
+                    <div class="hero-content">
+                        <div class="hero-badge">
+                            <span class="pulse-dot"></span> Online Chess Arena
+                        </div>
+                        <h1 class="hero-title">Play Chess Online</h1>
+                        <p class="hero-subtitle">Compete against players worldwide, challenge friends with custom rooms, or solve grandmaster puzzles.</p>
+                        <div class="hero-stats">
+                            <div class="hero-stat-item">
+                                <span class="stat-number">1,420</span>
+                                <span class="stat-label">Players Online</span>
+                            </div>
+                            <div class="hero-stat-divider"></div>
+                            <div class="hero-stat-item">
+                                <span class="stat-number">642</span>
+                                <span class="stat-label">Active Games</span>
+                            </div>
+                            <div class="hero-stat-divider"></div>
+                            <div class="hero-stat-item">
+                                <span class="stat-number" id="lobbyUserRating">1540</span>
+                                <span class="stat-label">Your Rapid ELO</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lobby Main Content Grid -->
+                <div class="lobby-grid">
+                    <!-- Left: Play Online Time Control Matrix & Matchmaking Card -->
+                    <div class="lobby-card play-online-card">
+                        <div class="card-header">
+                            <div class="card-title-wrap">
+                                <div class="card-icon bg-emerald">⚡</div>
+                                <div>
+                                    <h2 class="card-title">Play Online</h2>
+                                    <p class="card-desc">Select time control & find a matched opponent</p>
+                                </div>
+                            </div>
+                            <span class="pill-category">Live Match</span>
+                        </div>
+
+                        <!-- Time Control Group: BULLET -->
+                        <div class="tc-section">
+                            <div class="tc-group-header">
+                                <span class="tc-group-icon">🚀</span>
+                                <span class="tc-group-name">BULLET</span>
+                            </div>
+                            <div class="tc-buttons-grid">
+                                <button type="button" class="tc-choice-btn" data-tc="1+0">
+                                    <span class="tc-btn-time">1+0</span>
+                                    <span class="tc-btn-type">Bullet</span>
+                                </button>
+                                <button type="button" class="tc-choice-btn" data-tc="2+1">
+                                    <span class="tc-btn-time">2+1</span>
+                                    <span class="tc-btn-type">Bullet</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Time Control Group: BLITZ -->
+                        <div class="tc-section">
+                            <div class="tc-group-header">
+                                <span class="tc-group-icon">⚡</span>
+                                <span class="tc-group-name">BLITZ</span>
+                            </div>
+                            <div class="tc-buttons-grid">
+                                <button type="button" class="tc-choice-btn" data-tc="3+0">
+                                    <span class="tc-btn-time">3+0</span>
+                                    <span class="tc-btn-type">Blitz</span>
+                                </button>
+                                <button type="button" class="tc-choice-btn" data-tc="3+2">
+                                    <span class="tc-btn-time">3+2</span>
+                                    <span class="tc-btn-type">Blitz</span>
+                                </button>
+                                <button type="button" class="tc-choice-btn" data-tc="5+0">
+                                    <span class="tc-btn-time">5+0</span>
+                                    <span class="tc-btn-type">Blitz</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Time Control Group: RAPID -->
+                        <div class="tc-section">
+                            <div class="tc-group-header">
+                                <span class="tc-group-icon">⏱️</span>
+                                <span class="tc-group-name">RAPID</span>
+                                <span class="badge-popular">Popular</span>
+                            </div>
+                            <div class="tc-buttons-grid">
+                                <button type="button" class="tc-choice-btn selected" data-tc="10+0">
+                                    <span class="tc-btn-time">10+0</span>
+                                    <span class="tc-btn-type">Rapid</span>
+                                </button>
+                                <button type="button" class="tc-choice-btn" data-tc="10+5">
+                                    <span class="tc-btn-time">10+5</span>
+                                    <span class="tc-btn-type">Rapid</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Time Control Group: CLASSICAL -->
+                        <div class="tc-section">
+                            <div class="tc-group-header">
+                                <span class="tc-group-icon">⏳</span>
+                                <span class="tc-group-name">CLASSICAL</span>
+                            </div>
+                            <div class="tc-buttons-grid">
+                                <button type="button" class="tc-choice-btn" data-tc="30+0">
+                                    <span class="tc-btn-time">30+0</span>
+                                    <span class="tc-btn-type">Classical</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Find Opponent Button -->
+                        <div class="find-opponent-wrap">
+                            <button type="button" class="btn-find-opponent" id="btnFindOpponent">
+                                <span class="find-icon">⚔️</span>
+                                <span class="find-text">FIND OPPONENT</span>
+                                <span class="find-badge" id="selectedTcBadge">10+0 • Rapid</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Quick Modes List -->
+                    <div class="lobby-side-modes">
+                        <!-- 1. Play with Friend -->
+                        <div class="mode-card" id="modeFriend">
+                            <div class="mode-icon-wrap bg-blue">👥</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Play with Friend</h3>
+                                <p class="mode-desc">Share a private match link or room code</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 2. Create Game -->
+                        <div class="mode-card" id="modeCreateGame">
+                            <div class="mode-icon-wrap bg-purple">➕</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Create Game</h3>
+                                <p class="mode-desc">Custom time control, rating, and color</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 3. Join Game -->
+                        <div class="mode-card" id="modeJoinGame">
+                            <div class="mode-icon-wrap bg-amber">🔍</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Join Game</h3>
+                                <p class="mode-desc">Enter an invite code to join friend's match</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 4. Play vs Computer -->
+                        <div class="mode-card" id="modeVsBot">
+                            <div class="mode-icon-wrap bg-green">🤖</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Play vs Computer</h3>
+                                <p class="mode-desc">Practice offline against adaptive chess bots</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 5. Puzzles -->
+                        <div class="mode-card" id="modePuzzles">
+                            <div class="mode-icon-wrap bg-orange">🧩</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Puzzles</h3>
+                                <p class="mode-desc">Solve daily tactical puzzles & level up</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 6. Game History -->
+                        <div class="mode-card" id="modeHistory">
+                            <div class="mode-icon-wrap bg-teal">📜</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Game History</h3>
+                                <p class="mode-desc">Review your past games, results, and moves</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 7. Profile -->
+                        <div class="mode-card" id="modeProfile">
+                            <div class="mode-icon-wrap bg-rose">👤</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Profile</h3>
+                                <p class="mode-desc">Stats, ratings, win rate, and achievements</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- ─── MAIN GAME LAYOUT ───────────────────────────────────── -->
-        <main class="main-layout">
+        <main class="main-layout" id="gameView" style="display: none;">
             <!-- ── Left/Center: Game Viewport ── -->
             <section class="game-viewport">
                 <!-- Opponent Strip -->
@@ -279,6 +486,9 @@
                         <button class="action-btn btn-flip" id="btnFlip" title="Flip Board Perspective">
                             🔀 Flip
                         </button>
+                        <button class="action-btn btn-lobby" id="btnReturnToLobby" title="Return to Lobby">
+                            🏠 Lobby
+                        </button>
                     </div>
 
                     <!-- Chat Header -->
@@ -395,6 +605,175 @@
             <div class="modal-actions dual">
                 <button class="btn btn-primary-action" id="btnConfirmNewGame">Yes, Reset</button>
                 <button class="btn btn-decline" id="btnCancelNewGame">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Matchmaking Modal (Phase 9) ────────────────────────── -->
+    <div class="modal-overlay matchmaking-overlay" id="matchmakingModal">
+        <div class="modal matchmaking-modal">
+            <div class="matchmaking-radar">
+                <div class="radar-circle circle-1"></div>
+                <div class="radar-circle circle-2"></div>
+                <div class="radar-circle circle-3"></div>
+                <div class="radar-center-icon">♟</div>
+            </div>
+            <div class="matchmaking-title">Searching for opponent...</div>
+            <div class="matchmaking-tc-tag" id="matchmakingTcTag">10+0 • Rapid</div>
+            <div class="matchmaking-timer" id="matchmakingTimer">00:00</div>
+            <div class="matchmaking-subtext">Estimated wait time: &lt; 15 seconds</div>
+            <button class="btn btn-danger-action btn-cancel-search" id="btnCancelSearch">Cancel</button>
+        </div>
+    </div>
+
+    <!-- ─── Play With Friend Modal ─────────────────────────────── -->
+    <div class="modal-overlay" id="playFriendModal">
+        <div class="modal">
+            <div class="modal-icon text-blue">👥</div>
+            <div class="modal-title">Play with a Friend</div>
+            <div class="modal-message">Share this direct invite link or game code with your friend to play:</div>
+            <div class="share-box">
+                <input type="text" id="friendInviteLink" readonly value="http://localhost:3000?room=ARENA-7821">
+                <button class="btn btn-primary-action" id="btnCopyInviteLink">Copy Link</button>
+            </div>
+            <div class="room-code-display">
+                Room Code: <strong id="friendRoomCode">ARENA-7821</strong>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-decline" id="btnCloseFriendModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Join Game Modal ────────────────────────────────────── -->
+    <div class="modal-overlay" id="joinGameModal">
+        <div class="modal">
+            <div class="modal-icon text-amber">🔍</div>
+            <div class="modal-title">Join Game</div>
+            <div class="modal-message">Enter the 6-character room code provided by your opponent:</div>
+            <div class="join-input-wrap">
+                <input type="text" id="joinRoomInput" placeholder="e.g. ARENA-7821" maxlength="15" autocomplete="off">
+            </div>
+            <div class="modal-actions dual">
+                <button class="btn btn-primary-action" id="btnConfirmJoinGame">Join Match</button>
+                <button class="btn btn-decline" id="btnCloseJoinModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Play vs Computer Modal ─────────────────────────────── -->
+    <div class="modal-overlay" id="vsComputerModal">
+        <div class="modal">
+            <div class="modal-icon text-emerald">🤖</div>
+            <div class="modal-title">Play vs Computer</div>
+            <div class="modal-message">Select engine bot difficulty:</div>
+            <div class="bot-difficulty-grid">
+                <button class="btn-diff selected" data-level="easy">
+                    <span class="diff-title">Beginner</span>
+                    <span class="diff-rating">Rating: 800</span>
+                </button>
+                <button class="btn-diff" data-level="medium">
+                    <span class="diff-title">Intermediate</span>
+                    <span class="diff-rating">Rating: 1400</span>
+                </button>
+                <button class="btn-diff" data-level="hard">
+                    <span class="diff-title">Master</span>
+                    <span class="diff-rating">Rating: 2200</span>
+                </button>
+            </div>
+            <div class="modal-actions dual">
+                <button class="btn btn-primary-action" id="btnStartBotGame">Start Match</button>
+                <button class="btn btn-decline" id="btnCloseBotModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Puzzles Modal ──────────────────────────────────────── -->
+    <div class="modal-overlay" id="puzzlesModal">
+        <div class="modal modal-wide">
+            <div class="modal-icon text-amber">🧩</div>
+            <div class="modal-title">Daily Tactical Puzzles</div>
+            <div class="modal-message">Puzzle #482 • White to move and gain winning material</div>
+            <div class="puzzle-preview-badge">Difficulty: ★★★☆☆ (1650 ELO)</div>
+            <div class="puzzle-callout">
+                "Find the crushing tactical sequence to win the Queen!"
+            </div>
+            <div class="modal-actions dual">
+                <button class="btn btn-primary-action" id="btnSolvePuzzle">Solve on Board</button>
+                <button class="btn btn-decline" id="btnClosePuzzleModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Game History Modal ─────────────────────────────────── -->
+    <div class="modal-overlay" id="historyModal">
+        <div class="modal modal-wide">
+            <div class="modal-icon text-blue">📜</div>
+            <div class="modal-title">Recent Game History</div>
+            <div class="history-list">
+                <div class="history-item win">
+                    <div class="hist-result">WIN</div>
+                    <div class="hist-details">
+                        <span class="hist-players">vs. Hikaru_K (1515)</span>
+                        <span class="hist-meta">10+0 • Checkmate • 38 moves</span>
+                    </div>
+                    <span class="hist-rating-change">+12</span>
+                </div>
+                <div class="history-item loss">
+                    <div class="hist-result">LOSS</div>
+                    <div class="hist-details">
+                        <span class="hist-players">vs. Magnus_G (1540)</span>
+                        <span class="hist-meta">3+0 • Timeout • 45 moves</span>
+                    </div>
+                    <span class="hist-rating-change">-8</span>
+                </div>
+                <div class="history-item draw">
+                    <div class="hist-result">DRAW</div>
+                    <div class="hist-details">
+                        <span class="hist-players">vs. Fabiano_C (1530)</span>
+                        <span class="hist-meta">10+0 • Agreement • 52 moves</span>
+                    </div>
+                    <span class="hist-rating-change">+1</span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-decline" id="btnCloseHistoryModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Profile Modal ──────────────────────────────────────── -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal modal-wide">
+            <div class="modal-icon text-purple">👤</div>
+            <div class="modal-title">Player Profile</div>
+            <div class="profile-card-header">
+                <div class="profile-avatar">GM</div>
+                <div class="profile-user-info">
+                    <div class="profile-handle">Magnus_G <span class="badge-pro">PRO</span></div>
+                    <div class="profile-title">Grandmaster • Member since 2024</div>
+                </div>
+            </div>
+            <div class="profile-stats-grid">
+                <div class="prof-stat">
+                    <span class="stat-val">1540</span>
+                    <span class="stat-lbl">Rapid ELO</span>
+                </div>
+                <div class="prof-stat">
+                    <span class="stat-val">1510</span>
+                    <span class="stat-lbl">Blitz ELO</span>
+                </div>
+                <div class="prof-stat">
+                    <span class="stat-val">68%</span>
+                    <span class="stat-lbl">Win Rate</span>
+                </div>
+                <div class="prof-stat">
+                    <span class="stat-val">142</span>
+                    <span class="stat-lbl">Games Won</span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-decline" id="btnCloseProfileModal">Close</button>
             </div>
         </div>
     </div>

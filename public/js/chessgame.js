@@ -141,7 +141,55 @@ const btnCancelNewGame  = document.getElementById("btnCancelNewGame");
 
 const toastEl           = document.getElementById("toast");
 
-// Control & Game State tracking (Phase 7)
+// ─── Phase 9: Lobby & Matchmaking DOM Elements ─────────────────
+const lobbyView           = document.getElementById("lobbyView");
+const gameView            = document.getElementById("gameView");
+const navLobby            = document.getElementById("navLobby");
+const navPlay             = document.getElementById("navPlay");
+const navPuzzles          = document.getElementById("navPuzzles");
+const navHistory          = document.getElementById("navHistory");
+const btnNavActiveGame    = document.getElementById("btnNavActiveGame");
+const btnReturnToLobby    = document.getElementById("btnReturnToLobby");
+const btnFindOpponent     = document.getElementById("btnFindOpponent");
+const selectedTcBadge     = document.getElementById("selectedTcBadge");
+const tcChoiceButtons     = document.querySelectorAll(".tc-choice-btn");
+
+const matchmakingModal    = document.getElementById("matchmakingModal");
+const matchmakingTcTag    = document.getElementById("matchmakingTcTag");
+const matchmakingTimer    = document.getElementById("matchmakingTimer");
+const btnCancelSearch     = document.getElementById("btnCancelSearch");
+
+const playFriendModal     = document.getElementById("playFriendModal");
+const btnCloseFriendModal = document.getElementById("btnCloseFriendModal");
+const btnCopyInviteLink   = document.getElementById("btnCopyInviteLink");
+const friendInviteLink    = document.getElementById("friendInviteLink");
+const friendRoomCode      = document.getElementById("friendRoomCode");
+
+const joinGameModal       = document.getElementById("joinGameModal");
+const btnCloseJoinModal   = document.getElementById("btnCloseJoinModal");
+const btnConfirmJoinGame  = document.getElementById("btnConfirmJoinGame");
+const joinRoomInput       = document.getElementById("joinRoomInput");
+
+const vsComputerModal     = document.getElementById("vsComputerModal");
+const btnCloseBotModal    = document.getElementById("btnCloseBotModal");
+const btnStartBotGame     = document.getElementById("btnStartBotGame");
+
+const puzzlesModal        = document.getElementById("puzzlesModal");
+const btnClosePuzzleModal = document.getElementById("btnClosePuzzleModal");
+const btnSolvePuzzle      = document.getElementById("btnSolvePuzzle");
+
+const historyModal        = document.getElementById("historyModal");
+const btnCloseHistoryModal= document.getElementById("btnCloseHistoryModal");
+
+const profileModal        = document.getElementById("profileModal");
+const btnCloseProfileModal= document.getElementById("btnCloseProfileModal");
+const userMenu            = document.getElementById("userMenu");
+
+let selectedLobbyTc = "10+0";
+let matchmakingTimerInterval = null;
+let matchmakingStartSeconds = 0;
+
+// Control & Game State tracking (Phase 7 & 8)
 let drawOfferedByMe = false;
 let rematchOfferedByMe = false;
 let currentGameState = "WAITING"; // WAITING, STARTING, ACTIVE, CHECK, CHECKMATE, DRAW, STALEMATE, TIMEOUT, RESIGNED, ABORTED, DISCONNECTED, FINISHED
@@ -1426,6 +1474,195 @@ btnFlip.addEventListener("click", () => {
     showToast(isFlipped ? "Board perspective flipped" : "Board perspective reset");
 });
 
+// ─── Phase 9: Lobby & View Management ─────────────────────────
+function showLobby() {
+    if (lobbyView) lobbyView.style.display = "flex";
+    if (gameView) gameView.style.display = "none";
+    if (navLobby) navLobby.classList.add("active");
+    if (navPlay) navPlay.classList.remove("active");
+    if (navPuzzles) navPuzzles.classList.remove("active");
+    if (navHistory) navHistory.classList.remove("active");
+    updateActiveGameNavButton();
+}
+
+function showGame() {
+    if (lobbyView) lobbyView.style.display = "none";
+    if (gameView) gameView.style.display = "grid";
+    if (navPlay) navPlay.classList.add("active");
+    if (navLobby) navLobby.classList.remove("active");
+    if (navPuzzles) navPuzzles.classList.remove("active");
+    if (navHistory) navHistory.classList.remove("active");
+    renderLabels();
+    renderBoard();
+    updateClockDisplays();
+    updateActionButtonsState();
+    updateActiveGameNavButton();
+}
+
+function updateActiveGameNavButton() {
+    if (!btnNavActiveGame) return;
+    const movesCount = (moveHistory && moveHistory.length) || (chess.history && chess.history().length) || 0;
+    const isPlayer = playerRole === "w" || playerRole === "b";
+    if (isPlayer && !isGameOver && movesCount > 0) {
+        btnNavActiveGame.style.display = "inline-flex";
+    } else {
+        btnNavActiveGame.style.display = "none";
+    }
+}
+
+// Navigation Bar Listeners
+if (navLobby) navLobby.addEventListener("click", (e) => { e.preventDefault(); showLobby(); });
+if (navPlay)  navPlay.addEventListener("click", (e) => { e.preventDefault(); showGame(); });
+if (navPuzzles) navPuzzles.addEventListener("click", (e) => { e.preventDefault(); openModal(puzzlesModal); });
+if (navHistory) navHistory.addEventListener("click", (e) => { e.preventDefault(); openModal(historyModal); });
+if (btnNavActiveGame) btnNavActiveGame.addEventListener("click", () => showGame());
+if (btnReturnToLobby) btnReturnToLobby.addEventListener("click", () => showLobby());
+const brandEl = document.querySelector(".brand");
+if (brandEl) brandEl.addEventListener("click", (e) => { e.preventDefault(); showLobby(); });
+
+// Time Control Choices in Lobby
+const TC_LABELS = {
+    "1+0": "1+0 • Bullet",
+    "2+1": "2+1 • Bullet",
+    "3+0": "3+0 • Blitz",
+    "3+2": "3+2 • Blitz",
+    "5+0": "5+0 • Blitz",
+    "10+0": "10+0 • Rapid",
+    "10+5": "10+5 • Rapid",
+    "30+0": "30+0 • Classical",
+};
+
+tcChoiceButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+        tcChoiceButtons.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        selectedLobbyTc = btn.dataset.tc;
+        if (selectedTcBadge) {
+            selectedTcBadge.textContent = TC_LABELS[selectedLobbyTc] || selectedLobbyTc;
+        }
+        if (timeControlSelect) {
+            timeControlSelect.value = selectedLobbyTc;
+        }
+    });
+});
+
+// Matchmaking Logic
+function formatSeconds(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
+}
+
+function startMatchmakingSearch() {
+    openModal(matchmakingModal);
+    if (matchmakingTcTag) {
+        matchmakingTcTag.textContent = TC_LABELS[selectedLobbyTc] || selectedLobbyTc;
+    }
+    matchmakingStartSeconds = 0;
+    if (matchmakingTimer) matchmakingTimer.textContent = "00:00";
+
+    if (matchmakingTimerInterval) clearInterval(matchmakingTimerInterval);
+    matchmakingTimerInterval = setInterval(() => {
+        matchmakingStartSeconds++;
+        if (matchmakingTimer) {
+            matchmakingTimer.textContent = formatSeconds(matchmakingStartSeconds);
+        }
+    }, 1000);
+
+    socket.emit("findMatch", {
+        timeControl: selectedLobbyTc,
+        sessionToken: sessionToken
+    });
+}
+
+function cancelMatchmakingSearch() {
+    if (matchmakingTimerInterval) {
+        clearInterval(matchmakingTimerInterval);
+        matchmakingTimerInterval = null;
+    }
+    closeModal(matchmakingModal);
+    socket.emit("cancelMatchmaking");
+    showToast("Matchmaking cancelled");
+}
+
+if (btnFindOpponent) btnFindOpponent.addEventListener("click", startMatchmakingSearch);
+if (btnCancelSearch) btnCancelSearch.addEventListener("click", cancelMatchmakingSearch);
+
+// ─── Mode Cards & Interactive Modals ───────────────────────────
+const modeFriend     = document.getElementById("modeFriend");
+const modeCreateGame = document.getElementById("modeCreateGame");
+const modeJoinGame   = document.getElementById("modeJoinGame");
+const modeVsBot      = document.getElementById("modeVsBot");
+const modePuzzles    = document.getElementById("modePuzzles");
+const modeHistory    = document.getElementById("modeHistory");
+const modeProfile    = document.getElementById("modeProfile");
+
+if (modeFriend) modeFriend.addEventListener("click", () => openModal(playFriendModal));
+if (modeCreateGame) modeCreateGame.addEventListener("click", () => openModal(playFriendModal));
+if (modeJoinGame) modeJoinGame.addEventListener("click", () => openModal(joinGameModal));
+if (modeVsBot) modeVsBot.addEventListener("click", () => openModal(vsComputerModal));
+if (modePuzzles) modePuzzles.addEventListener("click", () => openModal(puzzlesModal));
+if (modeHistory) modeHistory.addEventListener("click", () => openModal(historyModal));
+if (modeProfile) modeProfile.addEventListener("click", () => openModal(profileModal));
+if (userMenu) userMenu.addEventListener("click", () => openModal(profileModal));
+
+if (btnCloseFriendModal) btnCloseFriendModal.addEventListener("click", () => closeModal(playFriendModal));
+if (btnCopyInviteLink) {
+    btnCopyInviteLink.addEventListener("click", () => {
+        if (friendInviteLink) {
+            friendInviteLink.select();
+            navigator.clipboard.writeText(friendInviteLink.value).then(() => {
+                showToast("Invite link copied to clipboard!");
+            }).catch(() => {
+                showToast("Link copied!");
+            });
+        }
+    });
+}
+
+if (btnCloseJoinModal) btnCloseJoinModal.addEventListener("click", () => closeModal(joinGameModal));
+if (btnConfirmJoinGame) {
+    btnConfirmJoinGame.addEventListener("click", () => {
+        const code = joinRoomInput.value.trim();
+        if (!code) {
+            showToast("Please enter a room code");
+            return;
+        }
+        closeModal(joinGameModal);
+        showGame();
+        showToast(`Joined room: ${code}`);
+    });
+}
+
+if (btnCloseBotModal) btnCloseBotModal.addEventListener("click", () => closeModal(vsComputerModal));
+if (btnStartBotGame) {
+    btnStartBotGame.addEventListener("click", () => {
+        closeModal(vsComputerModal);
+        showGame();
+        showToast("Starting match vs Computer Bot!");
+    });
+}
+
+const botDiffButtons = document.querySelectorAll(".btn-diff");
+botDiffButtons.forEach(b => {
+    b.addEventListener("click", () => {
+        botDiffButtons.forEach(x => x.classList.remove("selected"));
+        b.classList.add("selected");
+    });
+});
+
+if (btnClosePuzzleModal) btnClosePuzzleModal.addEventListener("click", () => closeModal(puzzlesModal));
+if (btnSolvePuzzle) {
+    btnSolvePuzzle.addEventListener("click", () => {
+        closeModal(puzzlesModal);
+        showGame();
+        showToast("Puzzle #482 loaded on board!");
+    });
+}
+
+if (btnCloseHistoryModal) btnCloseHistoryModal.addEventListener("click", () => closeModal(historyModal));
+if (btnCloseProfileModal) btnCloseProfileModal.addEventListener("click", () => closeModal(profileModal));
+
 // ─── Socket.IO Event Handlers ─────────────────────────────────
 
 // Full game state
@@ -1447,6 +1684,7 @@ socket.on("gameState", (state) => {
     updateMoveHistory(state.history);
     updatePlayerInfo(state.players);
     updateActionButtonsState();
+    updateActiveGameNavButton();
     renderBoard();
 });
 
@@ -1520,6 +1758,7 @@ socket.on("move", (moveData) => {
     // Update history
     updateMoveHistory(moveData.history);
     updateActionButtonsState();
+    updateActiveGameNavButton();
 
     // If the user was in historical review mode, notify them with a toast
     if (viewingMoveIndex !== null) {
@@ -1587,6 +1826,7 @@ socket.on("gameOver", (data) => {
     currentLegalMoves = [];
     showGameOverModal(data);
     renderBoard();
+    updateActiveGameNavButton();
 });
 
 // Player disconnected
@@ -1615,8 +1855,37 @@ socket.on("newGame", (state) => {
     closeAllConfirmModals();
     updatePlayerInfo();
     updateActionButtonsState();
+    updateActiveGameNavButton();
     renderBoard();
     showToast("New game started!");
+    playSound("notify");
+});
+
+// Phase 9: Matchmaking Socket Handlers
+socket.on("matchmakingStarted", (data) => {
+    openModal(matchmakingModal);
+    if (matchmakingTcTag) {
+        matchmakingTcTag.textContent = (data && data.label) ? data.label : (TC_LABELS[selectedLobbyTc] || selectedLobbyTc);
+    }
+});
+
+socket.on("matchmakingCancelled", () => {
+    if (matchmakingTimerInterval) {
+        clearInterval(matchmakingTimerInterval);
+        matchmakingTimerInterval = null;
+    }
+    closeModal(matchmakingModal);
+});
+
+socket.on("matchFound", (data) => {
+    if (matchmakingTimerInterval) {
+        clearInterval(matchmakingTimerInterval);
+        matchmakingTimerInterval = null;
+    }
+    closeModal(matchmakingModal);
+    showGame();
+    const tcLabel = (data && data.timeControl) ? data.timeControl.label : (TC_LABELS[selectedLobbyTc] || selectedLobbyTc);
+    showToast(`Opponent found! Match starting (${tcLabel})`, 3500);
     playSound("notify");
 });
 
@@ -1638,6 +1907,13 @@ socket.on("reconnected", (data) => {
     if (dot) dot.style.background = "var(--accent-emerald)";
     if (text) text.textContent = "Connected";
     updateTurnIndicators();
+    updateActiveGameNavButton();
+
+    // If reconnecting to an active game in progress, transition straight to board
+    const movesCount = (moveHistory && moveHistory.length) || (chess.history && chess.history().length) || 0;
+    if (!isGameOver && movesCount > 0) {
+        showGame();
+    }
 });
 
 socket.on("playerReconnected", (data) => {
@@ -1659,3 +1935,6 @@ renderBoard();
 updateClockDisplays();
 updateActionButtonsState();
 startLocalClockTicker();
+
+// Phase 9: Initialize to Lobby homepage view instead of showing chessboard directly
+showLobby();

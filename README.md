@@ -61,6 +61,27 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Standard Piece Sorting:** Ordered by standard piece values (`♟ Pawns`, `♞ Knights`, `♝ Bishops`, `♜ Rooks`, `♛ Queens`)
   - **Material Lead Differential:** Subtle, clean real-time advantage badge (`+1`, `+2`, `+5`, etc.) showing exact point lead
   - **Historical Scrubber Synchronization:** Dynamically recalculates captured pieces and material lead when scrubbing through historical moves
+- **Phase 9 Game Lobby & Real-Time Matchmaking System** — Complete homepage experience replacing direct board drop-in:
+  - **Lobby Homepage:** Dedicated `#lobbyView` showcasing platform statistics, quick-action cards, and real-time game mode launchers
+  - **Play Online with Grouped Time Controls:**
+    - **BULLET:** `1+0` (Ultra Bullet), `2+1` (Bullet with Increment)
+    - **BLITZ:** `3+0` (Super Blitz), `3+2` (Blitz Tournament Standard), `5+0` (Classic Blitz)
+    - **RAPID:** `10+0` (Rapid Championship), `10+5` (Rapid with Increment)
+    - **CLASSICAL:** `30+0` (Standard Classical)
+  - **FIND OPPONENT Action & Radar Matchmaking State:**
+    - Dedicated matchmaking modal featuring animated pulsating radar concentric circles
+    - Real-time search stopwatch (`Searching for opponent... 00:12`)
+    - One-click `[ Cancel ]` button to gracefully withdraw from the matchmaking queue
+  - **Interactive Lobby Mode Suite:**
+    - **Play with Friend / Create Game:** Shareable room code and one-click clipboard invite link generator
+    - **Join Game:** Room ID / private code entry dialog
+    - **Play vs Computer:** Bot challenge selector with Easy, Intermediate, and Master difficulties
+    - **Puzzles:** Tactical puzzles module with rating progression
+    - **Game History:** Match review archive with outcomes, dates, and PGN export
+    - **Profile:** Comprehensive stats card with Blitz/Rapid/Bullet ratings, win rates, and achievements
+  - **Seamless View Switching & Active Match Indicator:**
+    - Instant switching between `#lobbyView` and `#gameView` without page reload or socket disruption
+    - Persistent glowing **"Active Match ➔"** navbar button allowing players to browse the lobby and return to ongoing games at any time
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -165,18 +186,21 @@ Open your browser at **[http://localhost:3000](http://localhost:3000)**
 ## 🔌 Socket.IO Event Architecture
 
 ```
-Client → Server              Server → Client
-─────────────────            ─────────────────
-move {from, to, promotion}   playerRole ("w"/"b")
-resign                       spectatorRole
-offerDraw / acceptDraw       gameState {fen, turn, isCheck, history, players, clocks}
-offerRematch / acceptRematch playersUpdate {white, black}
-leaveGame                    move {from, to, san, captured, clocks, increment}
-newGame                      playerDisconnected {role, roleName}
-setTimeControl               playerReconnected {role, roleName}
-identify {sessionToken}      reconnected {role, roleName}
-                             gameOver {type, winner, message}
-                             newGame {fen, turn, ...}
+Client → Server                   Server → Client
+─────────────────                 ─────────────────
+move {from, to, promotion}        playerRole ("w"/"b")
+resign                            spectatorRole
+offerDraw / acceptDraw            gameState {fen, turn, isCheck, history, players, clocks}
+offerRematch / acceptRematch      playersUpdate {white, black}
+leaveGame                         move {from, to, san, captured, clocks, increment}
+newGame                           playerDisconnected {role, roleName}
+setTimeControl                    playerReconnected {role, roleName}
+identify {sessionToken}           reconnected {role, roleName}
+findMatch {timeControl, token}    matchmakingStarted {timeControl, label}
+cancelMatchmaking                 matchmakingCancelled
+                                  matchFound {role, opponent, timeControl}
+                                  gameOver {type, winner, message}
+                                  newGame {fen, turn, ...}
 ```
 
 ---
@@ -193,7 +217,7 @@ identify {sessionToken}      reconnected {role, roleName}
 | **Phase 6** | Captured Pieces & Material Advantage (Visual Piece Trays, Subtle Differential +1/+2, Historical Scrubber Sync) | ✅ Complete |
 | **Phase 7** | Comprehensive Game States (Waiting, Starting, Active, Check, Checkmate, Draw, Stalemate, Timeout, Resigned, Aborted, Disconnected, Finished) | ✅ Complete |
 | **Phase 8** | Real-Time Reconnection (Persistent Session Tokens, Preserved Game State & Clocks, Resynchronization, Anti-Duplicate Architecture) | ✅ Complete |
-| **Phase 9** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 9** | Game Lobby & Matchmaking (Homepage Lobby, Time Control Selectors, Radar Search, Friendly Games, Puzzles, History, Profile) | ✅ Complete |
 | **Phase 10** | ELO ratings, leaderboards, player profiles | 📋 Planned |
 | **Phase 11** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
