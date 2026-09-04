@@ -819,13 +819,14 @@ html, body {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 10px;
+    padding: 3px 12px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
     border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.74rem;
+    font-weight: 700;
     color: var(--text-white);
+    transition: all 0.2s ease;
 }
 
 .pill-dot {
@@ -833,6 +834,120 @@ html, body {
     height: 6px;
     border-radius: 50%;
     background: var(--accent-emerald);
+    transition: all 0.2s ease;
+}
+
+/* Phase 7 Game State Representations on Turn Pill */
+.game-turn-pill.pill-waiting {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.1);
+    color: #fde68a;
+}
+.game-turn-pill.pill-waiting .pill-dot {
+    background: var(--accent-amber);
+    box-shadow: 0 0 6px var(--accent-amber);
+    animation: livePulse 1.5s infinite;
+}
+
+.game-turn-pill.pill-starting {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.1);
+    color: #a7f3d0;
+}
+.game-turn-pill.pill-starting .pill-dot {
+    background: var(--accent-emerald);
+}
+
+.game-turn-pill.pill-active {
+    border-color: rgba(59, 130, 246, 0.35);
+    color: var(--text-white);
+}
+.game-turn-pill.pill-active .pill-dot {
+    background: var(--accent-emerald);
+}
+
+.game-turn-pill.pill-check {
+    border-color: var(--accent-danger);
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+    animation: checkGlow 1s infinite alternate;
+}
+.game-turn-pill.pill-check .pill-dot {
+    background: var(--accent-danger);
+    box-shadow: 0 0 8px var(--accent-danger);
+}
+
+.game-turn-pill.pill-checkmate {
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.15);
+    color: #fef08a;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.35);
+}
+.game-turn-pill.pill-checkmate .pill-dot {
+    background: #fbbf24;
+}
+
+.game-turn-pill.pill-draw,
+.game-turn-pill.pill-stalemate {
+    border-color: rgba(156, 163, 175, 0.4);
+    background: rgba(156, 163, 175, 0.1);
+    color: #e5e7eb;
+}
+.game-turn-pill.pill-draw .pill-dot,
+.game-turn-pill.pill-stalemate .pill-dot {
+    background: #9ca3af;
+}
+
+.game-turn-pill.pill-timeout {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.15);
+    color: #fde68a;
+}
+.game-turn-pill.pill-timeout .pill-dot {
+    background: var(--accent-amber);
+}
+
+.game-turn-pill.pill-resigned {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
+}
+.game-turn-pill.pill-resigned .pill-dot {
+    background: var(--accent-danger);
+}
+
+.game-turn-pill.pill-aborted {
+    border-color: rgba(107, 114, 128, 0.4);
+    background: rgba(107, 114, 128, 0.12);
+    color: #9ca3af;
+}
+.game-turn-pill.pill-aborted .pill-dot {
+    background: #6b7280;
+}
+
+.game-turn-pill.pill-disconnected {
+    border-color: var(--accent-danger);
+    background: rgba(239, 68, 68, 0.2);
+    color: #fee2e2;
+    animation: livePulse 1s infinite;
+}
+.game-turn-pill.pill-disconnected .pill-dot {
+    background: var(--accent-danger);
+}
+
+.game-turn-pill.pill-finished {
+    border-color: rgba(139, 92, 246, 0.4);
+    background: rgba(139, 92, 246, 0.1);
+    color: #ddd6fe;
+}
+.game-turn-pill.pill-finished .pill-dot {
+    background: #8b5cf6;
+}
+
+@keyframes checkGlow {
+    from { box-shadow: 0 0 6px rgba(239, 68, 68, 0.3); }
+    to   { box-shadow: 0 0 16px rgba(239, 68, 68, 0.7); }
 }
 
 .material-summary-bar {
@@ -1390,6 +1505,34 @@ html, body {
 .modal-icon.text-blue {
     color: #60a5fa;
     filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.4));
+}
+
+.modal-outcome {
+    font-size: 1.15rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+}
+
+.modal-outcome.outcome-win {
+    color: var(--accent-emerald);
+    filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.45));
+}
+
+.modal-outcome.outcome-loss {
+    color: var(--accent-danger);
+    filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.45));
+}
+
+.modal-outcome.outcome-draw {
+    color: var(--accent-amber);
+    filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.45));
+}
+
+.modal-outcome.outcome-neutral {
+    color: #93c5fd;
+    filter: drop-shadow(0 0 12px rgba(147, 197, 253, 0.45));
 }
 
 .modal-title {

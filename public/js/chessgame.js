@@ -92,6 +92,7 @@ const chatInput         = document.getElementById("chatInput");
 
 const gameOverModal     = document.getElementById("gameOverModal");
 const modalIcon         = document.getElementById("modalIcon");
+const modalOutcome      = document.getElementById("modalOutcome");
 const modalTitle        = document.getElementById("modalTitle");
 const modalMessage      = document.getElementById("modalMessage");
 const btnModalRematch   = document.getElementById("btnModalRematch");
@@ -122,9 +123,11 @@ const btnCancelNewGame  = document.getElementById("btnCancelNewGame");
 
 const toastEl           = document.getElementById("toast");
 
-// Control state tracking
+// Control & Game State tracking (Phase 7)
 let drawOfferedByMe = false;
 let rematchOfferedByMe = false;
+let currentGameState = "WAITING"; // WAITING, STARTING, ACTIVE, CHECK, CHECKMATE, DRAW, STALEMATE, TIMEOUT, RESIGNED, ABORTED, DISCONNECTED, FINISHED
+let activePlayers = { white: null, black: null };
 
 // ─── Sound System ─────────────────────────────────────────────
 const sounds = {
@@ -561,28 +564,110 @@ window.addEventListener("keydown", (e) => {
     }
 });
 
+// ─── Game State Machine (Phase 7) ─────────────────────────────
+function setGameState(state, details = {}) {
+    currentGameState = state;
+    if (!gameTurnPill || !turnStatusText) return;
+
+    // Reset previous state classes
+    const stateClasses = [
+        "pill-waiting", "pill-starting", "pill-active", "pill-check",
+        "pill-checkmate", "pill-draw", "pill-stalemate", "pill-timeout",
+        "pill-resigned", "pill-aborted", "pill-disconnected", "pill-finished"
+    ];
+    stateClasses.forEach(cls => gameTurnPill.classList.remove(cls));
+
+    const turn = chess.turn();
+    const isWhiteTurn = turn === "w";
+    const isMyTurn = (playerRole === "w" && isWhiteTurn) || (playerRole === "b" && !isWhiteTurn);
+
+    switch (state) {
+        case "WAITING":
+            gameTurnPill.classList.add("pill-waiting");
+            turnStatusText.textContent = "⏳ Waiting for Opponent";
+            break;
+
+        case "STARTING":
+            gameTurnPill.classList.add("pill-starting");
+            turnStatusText.textContent = "⚔️ Ready • White to Move";
+            break;
+
+        case "ACTIVE":
+            gameTurnPill.classList.add("pill-active");
+            turnStatusText.textContent = isMyTurn ? "Your Turn" : (isWhiteTurn ? "White's Turn" : "Black's Turn");
+            break;
+
+        case "CHECK":
+            gameTurnPill.classList.add("pill-check");
+            turnStatusText.textContent = isMyTurn ? "⚠️ You are in Check!" : (isWhiteTurn ? "⚠️ White in Check!" : "⚠️ Black in Check!");
+            break;
+
+        case "CHECKMATE":
+            gameTurnPill.classList.add("pill-checkmate");
+            turnStatusText.textContent = `👑 Checkmate • ${details.winner === "w" ? "White" : "Black"} Won`;
+            break;
+
+        case "DRAW":
+            gameTurnPill.classList.add("pill-draw");
+            turnStatusText.textContent = "🤝 Draw Agreed";
+            break;
+
+        case "STALEMATE":
+            gameTurnPill.classList.add("pill-stalemate");
+            turnStatusText.textContent = "🔒 Stalemate • Draw";
+            break;
+
+        case "TIMEOUT":
+            gameTurnPill.classList.add("pill-timeout");
+            turnStatusText.textContent = `⏱️ Time Out • ${details.winner === "w" ? "White" : "Black"} Won`;
+            break;
+
+        case "RESIGNED":
+            gameTurnPill.classList.add("pill-resigned");
+            turnStatusText.textContent = `⚑ ${details.resigner || (details.winner === "w" ? "Black" : "White")} Resigned`;
+            break;
+
+        case "ABORTED":
+            gameTurnPill.classList.add("pill-aborted");
+            turnStatusText.textContent = "🚫 Game Aborted";
+            break;
+
+        case "DISCONNECTED":
+            gameTurnPill.classList.add("pill-disconnected");
+            turnStatusText.textContent = details.message || "⚡ Opponent Disconnected";
+            break;
+
+        case "FINISHED":
+        default:
+            gameTurnPill.classList.add("pill-finished");
+            turnStatusText.textContent = "🏁 Match Concluded";
+            break;
+    }
+}
+
 // ─── Turn Indicators & Status Pill ───────────────────────────
 function updateTurnIndicators() {
     const turn = chess.turn();
-    const isCheck = chess.isCheck();
-
     const isUserTurn = (playerRole === "w" && turn === "w") || (playerRole === "b" && turn === "b");
     const isOpponentTurn = (playerRole === "w" && turn === "b") || (playerRole === "b" && turn === "w");
 
     playerBar.classList.toggle("active-turn", isUserTurn);
     opponentBar.classList.toggle("active-turn", isOpponentTurn || (playerRole === null && turn === "b"));
 
+    // If game is over, retain the current game-over state representation
     if (isGameOver) {
-        turnStatusText.textContent = "Match Finished";
         return;
     }
 
-    if (isCheck) {
-        turnStatusText.textContent = turn === "w" ? "White in Check!" : "Black in Check!";
-        gameTurnPill.style.borderColor = "var(--accent-danger)";
+    // Determine current active state
+    if (!activePlayers.white || !activePlayers.black) {
+        setGameState("WAITING");
+    } else if (moveHistory.length === 0 && !clocks.active) {
+        setGameState("STARTING");
+    } else if (chess.isCheck()) {
+        setGameState("CHECK");
     } else {
-        turnStatusText.textContent = turn === "w" ? "White's Turn" : "Black's Turn";
-        gameTurnPill.style.borderColor = "var(--border-subtle)";
+        setGameState("ACTIVE");
     }
 }
 
@@ -878,6 +963,13 @@ const renderBoard = () => {
 function updatePlayerInfo(playersData) {
     renderLabels();
 
+    if (playersData) {
+        activePlayers = {
+            white: playersData.white || null,
+            black: playersData.black || null
+        };
+    }
+
     const myWhite = playersData && playersData.white ? playersData.white : { name: "Magnus_G", rating: 1540 };
     const myBlack = playersData && playersData.black ? playersData.black : { name: "Hikaru_K", rating: 1515 };
 
@@ -923,6 +1015,7 @@ function updatePlayerInfo(playersData) {
     }
 
     updateClockDisplays();
+    updateTurnIndicators();
 }
 
 // ─── Toast Notifications ─────────────────────────────────────
@@ -1038,7 +1131,7 @@ function updateActionButtonsState() {
     }
 }
 
-// ─── Game Over Modal ─────────────────────────────────────────
+// ─── Game Over Modal (Phase 7) ────────────────────────────────
 function showGameOverModal(data) {
     isGameOver = true;
     clocks.active = false;
@@ -1046,32 +1139,111 @@ function showGameOverModal(data) {
     rematchOfferedByMe = false;
     closeAllConfirmModals();
 
+    const isWinner = playerRole && data.winner === playerRole;
+    const isLoser = playerRole && data.winner && data.winner !== playerRole;
+
+    if (modalOutcome) {
+        modalOutcome.className = "modal-outcome";
+    }
+
     if (data.type === "checkmate") {
+        setGameState("CHECKMATE", data);
         modalIcon.textContent = "👑";
         modalIcon.className = "modal-icon text-blue";
-        modalTitle.textContent = "Checkmate!";
+        modalTitle.textContent = "CHECKMATE";
+        if (modalOutcome) {
+            if (isWinner) {
+                modalOutcome.textContent = "YOU WON! 🏆";
+                modalOutcome.classList.add("outcome-win");
+            } else if (isLoser) {
+                modalOutcome.textContent = "YOU LOST";
+                modalOutcome.classList.add("outcome-loss");
+            } else {
+                modalOutcome.textContent = `${data.winner === "w" ? "WHITE" : "BLACK"} WON!`;
+                modalOutcome.classList.add("outcome-neutral");
+            }
+        }
     } else if (data.type === "timeout") {
+        setGameState("TIMEOUT", data);
         modalIcon.textContent = "⏱";
         modalIcon.className = "modal-icon text-amber";
-        modalTitle.textContent = "Time Out!";
+        modalTitle.textContent = "TIME OUT";
+        if (modalOutcome) {
+            if (isWinner) {
+                modalOutcome.textContent = "YOU WON ON TIME! ⏱️";
+                modalOutcome.classList.add("outcome-win");
+            } else if (isLoser) {
+                modalOutcome.textContent = "TIME OUT — YOU LOST";
+                modalOutcome.classList.add("outcome-loss");
+            } else {
+                modalOutcome.textContent = `${data.winner === "w" ? "WHITE" : "BLACK"} WON ON TIME`;
+                modalOutcome.classList.add("outcome-neutral");
+            }
+        }
     } else if (data.type === "resignation") {
+        setGameState("RESIGNED", data);
         modalIcon.textContent = "⚑";
         modalIcon.className = "modal-icon text-danger";
-        modalTitle.textContent = "Resignation";
+        modalTitle.textContent = "RESIGNED";
+        if (modalOutcome) {
+            if (isWinner) {
+                modalOutcome.textContent = "VICTORY BY RESIGNATION ⚑";
+                modalOutcome.classList.add("outcome-win");
+            } else if (isLoser) {
+                modalOutcome.textContent = "YOU RESIGNED";
+                modalOutcome.classList.add("outcome-loss");
+            } else {
+                modalOutcome.textContent = "MATCH CONCLUDED";
+                modalOutcome.classList.add("outcome-neutral");
+            }
+        }
+    } else if (data.type === "aborted") {
+        setGameState("ABORTED", data);
+        modalIcon.textContent = "🚫";
+        modalIcon.className = "modal-icon text-amber";
+        modalTitle.textContent = "ABORTED";
+        if (modalOutcome) {
+            modalOutcome.textContent = "GAME ABORTED 🚫";
+            modalOutcome.classList.add("outcome-neutral");
+        }
     } else if (data.type === "abandonment") {
+        setGameState("FINISHED", data);
         modalIcon.textContent = "🚪";
         modalIcon.className = "modal-icon text-danger";
-        modalTitle.textContent = "Player Left";
+        modalTitle.textContent = "OPPONENT LEFT";
+        if (modalOutcome) {
+            if (isWinner) {
+                modalOutcome.textContent = "YOU WON BY FORFEIT 🚪";
+                modalOutcome.classList.add("outcome-win");
+            } else {
+                modalOutcome.textContent = "MATCH ABANDONED";
+                modalOutcome.classList.add("outcome-loss");
+            }
+        }
+    } else if (data.type === "stalemate") {
+        setGameState("STALEMATE", data);
+        modalIcon.textContent = "🔒";
+        modalIcon.className = "modal-icon text-amber";
+        modalTitle.textContent = "STALEMATE";
+        if (modalOutcome) {
+            modalOutcome.textContent = "DRAW 🔒";
+            modalOutcome.classList.add("outcome-draw");
+        }
     } else {
+        // Generic draw, repetition, insufficient
+        setGameState("DRAW", data);
         modalIcon.textContent = "🤝";
         modalIcon.className = "modal-icon text-amber";
-        modalTitle.textContent = "Draw";
+        modalTitle.textContent = "DRAW";
+        if (modalOutcome) {
+            modalOutcome.textContent = "DRAW 🤝";
+            modalOutcome.classList.add("outcome-draw");
+        }
     }
 
     modalMessage.textContent = data.message;
     openModal(gameOverModal);
     playSound("notify");
-    updateTurnIndicators();
     updateClockDisplays();
     updateActionButtonsState();
 }
@@ -1363,6 +1535,14 @@ socket.on("gameOver", (data) => {
     currentLegalMoves = [];
     showGameOverModal(data);
     renderBoard();
+});
+
+// Player disconnected
+socket.on("playerDisconnected", (data) => {
+    setGameState("DISCONNECTED", {
+        message: (data && data.roleName) ? `${data.roleName} Disconnected` : "⚡ Opponent Disconnected"
+    });
+    showToast((data && data.roleName) ? `${data.roleName} disconnected` : "Opponent disconnected");
 });
 
 // New game

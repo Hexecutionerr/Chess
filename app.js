@@ -284,6 +284,20 @@ io.on("connection", function (uniquesocket) {
                 text: `${leftRole} disconnected`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
+
+            // If game hasn't started (0 moves played), abort match
+            if (!isGameFinished() && chess.history().length === 0) {
+                isGameOverState = true;
+                stopClock();
+                io.emit("gameOver", {
+                    gameOver: true,
+                    type: "aborted",
+                    winner: null,
+                    message: `Game aborted — ${leftRole} disconnected before the first move.`
+                });
+            } else if (!isGameFinished()) {
+                io.emit("playerDisconnected", { role: leftRole === "White" ? "w" : "b", roleName: leftRole });
+            }
         }
     });
 
@@ -510,16 +524,25 @@ io.on("connection", function (uniquesocket) {
         const opponentColor = leftColor === "w" ? "b" : "w";
         const opponentRoleName = opponentColor === "w" ? "White" : "Black";
 
-        // If game was actively underway, handle forfeit
-        if (!isGameFinished() && chess.history().length > 0) {
+        // If game was actively underway or pending, handle forfeit or abort
+        if (!isGameFinished()) {
             isGameOverState = true;
             stopClock();
-            io.emit("gameOver", {
-                gameOver: true,
-                type: "abandonment",
-                winner: opponentColor,
-                message: `${opponentRoleName} wins — ${leftRoleName} left the game!`
-            });
+            if (chess.history().length === 0) {
+                io.emit("gameOver", {
+                    gameOver: true,
+                    type: "aborted",
+                    winner: null,
+                    message: `Game aborted — ${leftRoleName} left before the match began.`
+                });
+            } else {
+                io.emit("gameOver", {
+                    gameOver: true,
+                    type: "abandonment",
+                    winner: opponentColor,
+                    message: `${opponentRoleName} wins — ${leftRoleName} left the game!`
+                });
+            }
         }
 
         // Vacate seat

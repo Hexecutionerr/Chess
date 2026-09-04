@@ -77,6 +77,8 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 - **Dual Player Strips** — Opponent & Player cards with avatars, ratings, online indicators, and active turn pulses
 - **Live Chess Clocks** — High-legibility monospaced digital timers with active glowing states
 - **Material Evaluation & Captured Trays** — Visual trays of captured pieces with real-time material lead calculations (+1, +2, etc.)
+- **Comprehensive 12 Game States & UI Representations** — Real-time state machine supporting `WAITING`, `STARTING`, `ACTIVE`, `CHECK`, `CHECKMATE`, `DRAW`, `STALEMATE`, `TIMEOUT`, `RESIGNED`, `ABORTED`, `DISCONNECTED`, and `FINISHED`
+- **Dynamic Game Over Modal & Action Flow** — Result header (`YOU WON! 🏆` / `YOU LOST` / `DRAW 🤝` / `GAME ABORTED 🚫`), game details, Rematch, New Game, Review Board, and Leave Seat actions
 - **Algebraic Move Notation Panel** — Two-column moves table (`#`, `White`, `Black`) with active-move highlighting, history navigation buttons, and auto-scroll
 - **Action Control Toolbar** — Integrated Draw, Resign, Flip, and New Game controls
 - **SVG Chess Pieces** — High-quality cburnett piece set with smooth drag-and-drop & click-to-move
@@ -135,8 +137,8 @@ ChessArena/
 
 ### Installation
 ```bash
-git clone https://github.com/Hexecutionerr/multiplayer-chess-game.git
-cd multiplayer-chess-game
+git clone https://github.com/Hexecutionerr/Chess.git
+cd Chess
 npm install
 ```
 
@@ -166,11 +168,11 @@ Client → Server              Server → Client
 ─────────────────            ─────────────────
 move {from, to, promotion}   playerRole ("w"/"b")
 resign                       spectatorRole
-newGame                      gameState {fen, turn, isCheck, history}
-                             boardState (FEN string)
-                             move {from, to, san, captured, isCheck}
-                             invalidMove
-                             gameOver {type, winner, message}
+offerDraw / acceptDraw       gameState {fen, turn, isCheck, history, players, clocks}
+offerRematch / acceptRematch playersUpdate {white, black}
+leaveGame                    move {from, to, san, captured, clocks, increment}
+newGame                      playerDisconnected {role, roleName}
+setTimeControl               gameOver {type, winner, message}
                              newGame {fen, turn, ...}
 ```
 
@@ -186,9 +188,10 @@ newGame                      gameState {fen, turn, isCheck, history}
 | **Phase 4** | Professional Move History (SAN Notation, Historical Position Review, Navigation Toolbar, Keyboard Controls, Non-Breaking Live Gameplay) | ✅ Complete |
 | **Phase 5** | Professional Game Controls (Offer/Accept/Decline Draw, Resign Modal, Leave Game Forfeit, Rematch with Color Swap, Reset Safeguards) | ✅ Complete |
 | **Phase 6** | Captured Pieces & Material Advantage (Visual Piece Trays, Subtle Differential +1/+2, Historical Scrubber Sync) | ✅ Complete |
-| **Phase 7** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
-| **Phase 8** | ELO ratings, leaderboards, player profiles | 📋 Planned |
-| **Phase 9** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 7** | Comprehensive Game States (Waiting, Starting, Active, Check, Checkmate, Draw, Stalemate, Timeout, Resigned, Aborted, Disconnected, Finished) | ✅ Complete |
+| **Phase 8** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 9** | ELO ratings, leaderboards, player profiles | 📋 Planned |
+| **Phase 10** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 
