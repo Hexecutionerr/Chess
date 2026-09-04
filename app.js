@@ -8,38 +8,6 @@ const app = express();
 const server = http.createServer(app);
 const io = socket(server);
 
-// ─── Game State ───────────────────────────────────────────────
-let chess = new Chess();
-let isGameOverState = false;
-
-function isGameFinished() {
-    return isGameOverState || chess.isGameOver();
-}
-
-let players = {
-    white: null,
-    black: null,
-};
-let playerSessions = {
-    white: null, // { sessionToken, socketId, connected: true, disconnectedAt: null, disconnectTimeout: null }
-    black: null  // { sessionToken, socketId, connected: true, disconnectedAt: null, disconnectTimeout: null }
-};
-let playerProfiles = {
-    white: { name: "Magnus_G", rating: 1540, avatarColor: "#3b82f6" },
-    black: { name: "Hikaru_K", rating: 1515, avatarColor: "#10b981" }
-};
-
-function getPlayersSnapshot() {
-    return {
-        white: playerSessions.white
-            ? { ...playerProfiles.white, connected: playerSessions.white.connected }
-            : null,
-        black: playerSessions.black
-            ? { ...playerProfiles.black, connected: playerSessions.black.connected }
-            : null,
-    };
-}
-
 // ─── Supported Time Controls ──────────────────────────────────
 const TIME_CONTROLS = {
     "1+0":   { base: 60,   increment: 0,  category: "Bullet",    label: "1+0 • Bullet" },
@@ -53,127 +21,227 @@ const TIME_CONTROLS = {
     "30+0":  { base: 1800, increment: 0,  category: "Classical", label: "30+0 • Classical" },
 };
 
-let currentTimeControlKey = "10+0";
-let clockState = {
-    w: TIME_CONTROLS["10+0"].base * 1000, // in milliseconds
-    b: TIME_CONTROLS["10+0"].base * 1000, // in milliseconds
-    active: false,
-    lastTurnTimestamp: null,
-    timer: null,
-};
-let lastSyncTimestamp = 0;
-let drawOffer = null; // 'w' or 'b'
-let rematchOffer = null; // 'w' or 'b'
-let chatMessages = [];
+// ─── GameRoom Class (Multi-room & Private Games) ───────────────
+class GameRoom {
+    constructor(id, options = {}) {
+        this.id = id;
+        this.chess = new Chess();
+        this.isGameOverState = false;
+        this.players = { white: null, black: null }; // socket IDs
+        this.playerSessions = {
+            white: null, // { sessionToken, socketId, connected: true, disconnectedAt: null, disconnectTimeout: null }
+            black: null
+        };
+        this.playerProfiles = {
+            white: { name: options.whiteName || "Magnus_G", rating: 1540, avatarColor: "#3b82f6" },
+            black: { name: options.blackName || "Hikaru_K", rating: 1515, avatarColor: "#10b981" }
+        };
+        this.currentTimeControlKey = options.timeControl || "10+0";
+        const tc = TIME_CONTROLS[this.currentTimeControlKey] || TIME_CONTROLS["10+0"];
+        this.clockState = {
+            w: tc.base * 1000,
+            b: tc.base * 1000,
+            active: false,
+            lastTurnTimestamp: null,
+            timer: null
+        };
+        this.lastSyncTimestamp = 0;
+        this.drawOffer = null; // 'w' or 'b'
+        this.rematchOffer = null; // 'w' or 'b'
+        this.chatMessages = [];
+        this.spectators = new Set();
+        this.isPrivate = !!options.isPrivate;
+        this.createdAt = Date.now();
+    }
+
+    isGameFinished() {
+        return this.isGameOverState || this.chess.isGameOver();
+    }
+
+    getClockSnapshot() {
+        let w = this.clockState.w;
+        let b = this.clockState.b;
+
+        if (this.clockState.active && this.clockState.lastTurnTimestamp) {
+            const currentTurn = this.chess.turn();
+            const elapsed = Date.now() - this.clockState.lastTurnTimestamp;
+            if (currentTurn === "w") w = Math.max(0, w - elapsed);
+            else if (currentTurn === "b") b = Math.max(0, b - elapsed);
+        }
+
+        const tc = TIME_CONTROLS[this.currentTimeControlKey] || TIME_CONTROLS["10+0"];
+        return {
+            wMs: Math.max(0, w),
+            bMs: Math.max(0, b),
+            w: Math.max(0, Math.ceil(w / 1000)),
+            b: Math.max(0, Math.ceil(b / 1000)),
+            active: this.clockState.active,
+            turn: this.chess.turn(),
+            lastTurnTimestamp: this.clockState.lastTurnTimestamp,
+            timeControl: {
+                key: this.currentTimeControlKey,
+                base: tc.base,
+                increment: tc.increment,
+                category: tc.category,
+                label: tc.label,
+            }
+        };
+    }
+
+    startClock() {
+        if (this.clockState.timer) return;
+        this.clockState.active = true;
+        this.clockState.lastTurnTimestamp = Date.now();
+        this.lastSyncTimestamp = Date.now();
+
+        this.clockState.timer = setInterval(() => {
+            if (!this.clockState.active || this.isGameFinished()) {
+                this.stopClock();
+                return;
+            }
+
+            const currentTurn = this.chess.turn();
+            const now = Date.now();
+            const elapsed = now - this.clockState.lastTurnTimestamp;
+            const remaining = this.clockState[currentTurn] - elapsed;
+
+            if (remaining <= 0) {
+                this.clockState[currentTurn] = 0;
+                this.isGameOverState = true;
+                this.stopClock();
+                const winner = currentTurn === "w" ? "b" : "w";
+
+                // FIDE Article 6.9: Draw if opponent cannot checkmate by any legal move series
+                const hasInsufficient = this.chess.isInsufficientMaterial();
+                if (hasInsufficient) {
+                    io.to(this.id).emit("gameOver", {
+                        gameOver: true,
+                        type: "timeout",
+                        winner: null,
+                        message: "Draw — timeout with insufficient material!"
+                    });
+                } else {
+                    io.to(this.id).emit("gameOver", {
+                        gameOver: true,
+                        type: "timeout",
+                        winner: winner,
+                        message: currentTurn === "w" ? "Black wins on time!" : "White wins on time!"
+                    });
+                }
+                io.to(this.id).emit("clockSync", this.getClockSnapshot());
+                return;
+            }
+
+            // Periodic authoritative sync (1 sec)
+            if (now - this.lastSyncTimestamp >= 1000) {
+                this.lastSyncTimestamp = now;
+                io.to(this.id).emit("clockSync", this.getClockSnapshot());
+            }
+        }, 100);
+    }
+
+    stopClock() {
+        this.clockState.active = false;
+        if (this.clockState.timer) {
+            clearInterval(this.clockState.timer);
+            this.clockState.timer = null;
+        }
+    }
+
+    resetClocks() {
+        this.stopClock();
+        const tc = TIME_CONTROLS[this.currentTimeControlKey] || TIME_CONTROLS["10+0"];
+        this.clockState.w = tc.base * 1000;
+        this.clockState.b = tc.base * 1000;
+        this.clockState.active = false;
+        this.clockState.lastTurnTimestamp = null;
+        this.lastSyncTimestamp = 0;
+    }
+
+    getPlayersSnapshot() {
+        return {
+            white: this.playerSessions.white
+                ? { ...this.playerProfiles.white, connected: this.playerSessions.white.connected }
+                : null,
+            black: this.playerSessions.black
+                ? { ...this.playerProfiles.black, connected: this.playerSessions.black.connected }
+                : null,
+        };
+    }
+
+    checkGameOver() {
+        if (!this.chess.isGameOver()) return null;
+
+        let result = { gameOver: true };
+
+        if (this.chess.isCheckmate()) {
+            const winner = this.chess.turn() === "w" ? "b" : "w";
+            result.type = "checkmate";
+            result.winner = winner;
+            result.message =
+                winner === "w" ? "White wins by checkmate!" : "Black wins by checkmate!";
+        } else if (this.chess.isStalemate()) {
+            result.type = "stalemate";
+            result.winner = null;
+            result.message = "Draw by stalemate!";
+        } else if (this.chess.isThreefoldRepetition()) {
+            result.type = "repetition";
+            result.winner = null;
+            result.message = "Draw by threefold repetition!";
+        } else if (this.chess.isInsufficientMaterial()) {
+            result.type = "insufficient";
+            result.winner = null;
+            result.message = "Draw — insufficient material!";
+        } else if (this.chess.isDraw()) {
+            result.type = "draw";
+            result.winner = null;
+            result.message = "Draw by 50-move rule!";
+        }
+
+        return result;
+    }
+
+    getGameState() {
+        return {
+            roomId: this.id,
+            isPrivate: this.isPrivate,
+            fen: this.chess.fen(),
+            turn: this.chess.turn(),
+            isCheck: this.chess.isCheck(),
+            isGameOver: this.isGameFinished(),
+            history: this.chess.history({ verbose: true }),
+            clocks: this.getClockSnapshot(),
+            timeControl: {
+                key: this.currentTimeControlKey,
+                ...TIME_CONTROLS[this.currentTimeControlKey]
+            },
+            players: this.getPlayersSnapshot()
+        };
+    }
+}
+
+// ─── Room Registry ────────────────────────────────────────────
+const rooms = new Map();
+const defaultRoom = new GameRoom("default");
+rooms.set("default", defaultRoom);
+
 let matchmakingQueue = []; // { socketId, sessionToken, timeControl, enqueuedAt }
 
-// ─── Authoritative Clock Management ───────────────────────────
-function getClockSnapshot() {
-    let w = clockState.w;
-    let b = clockState.b;
-
-    if (clockState.active && clockState.lastTurnTimestamp) {
-        const currentTurn = chess.turn();
-        const elapsed = Date.now() - clockState.lastTurnTimestamp;
-        if (currentTurn === "w") w = Math.max(0, w - elapsed);
-        else if (currentTurn === "b") b = Math.max(0, b - elapsed);
+function getSocketRoom(uniquesocket) {
+    const rId = uniquesocket.currentRoomId || "default";
+    let r = rooms.get(rId);
+    if (!r) {
+        r = new GameRoom(rId);
+        rooms.set(rId, r);
     }
-
-    const tc = TIME_CONTROLS[currentTimeControlKey] || TIME_CONTROLS["10+0"];
-    return {
-        wMs: Math.max(0, w),
-        bMs: Math.max(0, b),
-        w: Math.max(0, Math.ceil(w / 1000)),
-        b: Math.max(0, Math.ceil(b / 1000)),
-        active: clockState.active,
-        turn: chess.turn(),
-        lastTurnTimestamp: clockState.lastTurnTimestamp,
-        timeControl: {
-            key: currentTimeControlKey,
-            base: tc.base,
-            increment: tc.increment,
-            category: tc.category,
-            label: tc.label,
-        }
-    };
+    return r;
 }
 
-function startClock() {
-    if (clockState.timer) return;
-    clockState.active = true;
-    clockState.lastTurnTimestamp = Date.now();
-    lastSyncTimestamp = Date.now();
-
-    // High frequency server check (100ms) to guarantee cheating prevention & exact timeout detection
-    clockState.timer = setInterval(() => {
-        if (!clockState.active || isGameFinished()) {
-            stopClock();
-            return;
-        }
-
-        const currentTurn = chess.turn();
-        const now = Date.now();
-        const elapsed = now - clockState.lastTurnTimestamp;
-        const remaining = clockState[currentTurn] - elapsed;
-
-        if (remaining <= 0) {
-            clockState[currentTurn] = 0;
-            isGameOverState = true;
-            stopClock();
-            const winner = currentTurn === "w" ? "b" : "w";
-
-            // FIDE Article 6.9: Draw if opponent cannot checkmate by any series of legal moves
-            const hasInsufficient = chess.isInsufficientMaterial();
-            if (hasInsufficient) {
-                io.emit("gameOver", {
-                    gameOver: true,
-                    type: "timeout",
-                    winner: null,
-                    message: "Draw — timeout with insufficient material!"
-                });
-            } else {
-                io.emit("gameOver", {
-                    gameOver: true,
-                    type: "timeout",
-                    winner: winner,
-                    message: currentTurn === "w" ? "Black wins on time!" : "White wins on time!"
-                });
-            }
-            io.emit("clockSync", getClockSnapshot());
-            return;
-        }
-
-        // Broadcast authoritative synchronization packet every 1 second
-        if (now - lastSyncTimestamp >= 1000) {
-            lastSyncTimestamp = now;
-            io.emit("clockSync", getClockSnapshot());
-        }
-    }, 100);
-}
-
-function stopClock() {
-    clockState.active = false;
-    if (clockState.timer) {
-        clearInterval(clockState.timer);
-        clockState.timer = null;
-    }
-}
-
-function resetClocks() {
-    stopClock();
-    const tc = TIME_CONTROLS[currentTimeControlKey] || TIME_CONTROLS["10+0"];
-    clockState.w = tc.base * 1000;
-    clockState.b = tc.base * 1000;
-    clockState.active = false;
-    clockState.lastTurnTimestamp = null;
-    lastSyncTimestamp = 0;
-}
-
-// ─── Express Config ───────────────────────────────────────────
+// ─── Express Routing ──────────────────────────────────────────
 app.set("view engine", "ejs");
 app.use(express.static(path.join(__dirname, "public")));
 
-// Serve chess.js from node_modules so client and server use the same version
+// Serve chess.js from node_modules so client and server share identical version
 app.use(
     "/vendor/chess.js",
     express.static(
@@ -182,205 +250,352 @@ app.use(
     )
 );
 
-app.get("/", (req, res) => {
+app.get(["/", "/game/:gameId"], (req, res) => {
     res.render("index", { title: "ChessArena — Professional Online Chess" });
 });
 
-// ─── Helper: Check Game-Over Conditions ───────────────────────
-function checkGameOver() {
-    if (!chess.isGameOver()) return null;
-
-    let result = { gameOver: true };
-
-    if (chess.isCheckmate()) {
-        const winner = chess.turn() === "w" ? "b" : "w";
-        result.type = "checkmate";
-        result.winner = winner;
-        result.message =
-            winner === "w" ? "White wins by checkmate!" : "Black wins by checkmate!";
-    } else if (chess.isStalemate()) {
-        result.type = "stalemate";
-        result.winner = null;
-        result.message = "Draw by stalemate!";
-    } else if (chess.isThreefoldRepetition()) {
-        result.type = "repetition";
-        result.winner = null;
-        result.message = "Draw by threefold repetition!";
-    } else if (chess.isInsufficientMaterial()) {
-        result.type = "insufficient";
-        result.winner = null;
-        result.message = "Draw — insufficient material!";
-    } else if (chess.isDraw()) {
-        result.type = "draw";
-        result.winner = null;
-        result.message = "Draw by 50-move rule!";
-    }
-
-    return result;
-}
-
-// ─── Helper: Build Game Snapshot ──────────────────────────────
-function getGameState() {
-    return {
-        fen: chess.fen(),
-        turn: chess.turn(),
-        isCheck: chess.isCheck(),
-        isGameOver: isGameFinished(),
-        history: chess.history({ verbose: true }),
-        clocks: getClockSnapshot(),
-        timeControl: {
-            key: currentTimeControlKey,
-            ...TIME_CONTROLS[currentTimeControlKey]
-        },
-        players: getPlayersSnapshot()
-    };
-}
-
-// ─── Socket.IO ────────────────────────────────────────────────
+// ─── Socket.IO Handler ────────────────────────────────────────
 io.on("connection", function (uniquesocket) {
-    console.log(`[connect] ${uniquesocket.id}`);
+    console.log(`[connect] Socket ${uniquesocket.id}`);
 
     const sessionToken = uniquesocket.handshake.auth?.sessionToken || uniquesocket.handshake.query?.sessionToken;
+    const requestedRoom = uniquesocket.handshake.query?.room || uniquesocket.handshake.query?.game;
+
+    let targetRoomId = (requestedRoom && typeof requestedRoom === "string") ? requestedRoom.trim().toUpperCase() : "default";
+    if (!rooms.has(targetRoomId)) {
+        if (targetRoomId === "default") {
+            rooms.set("default", defaultRoom);
+        } else {
+            // If requested room doesn't exist yet, place them in default room
+            targetRoomId = "default";
+        }
+    }
+
+    uniquesocket.join(targetRoomId);
+    uniquesocket.currentRoomId = targetRoomId;
+    const room = getSocketRoom(uniquesocket);
+
     let assignedRole = null;
     let isReconnection = false;
 
-    function handlePlayerIdentification(token) {
-        if (!token) return false;
+    function handlePlayerIdentification(token, targetRoom) {
+        if (!token || !targetRoom) return false;
 
-        // Check if token matches White player session
-        if (playerSessions.white && playerSessions.white.sessionToken === token) {
+        // Check if token matches White player session in this room
+        if (targetRoom.playerSessions.white && targetRoom.playerSessions.white.sessionToken === token) {
             assignedRole = "w";
             isReconnection = true;
-            if (playerSessions.white.disconnectTimeout) {
-                clearTimeout(playerSessions.white.disconnectTimeout);
-                playerSessions.white.disconnectTimeout = null;
+            if (targetRoom.playerSessions.white.disconnectTimeout) {
+                clearTimeout(targetRoom.playerSessions.white.disconnectTimeout);
+                targetRoom.playerSessions.white.disconnectTimeout = null;
             }
-            playerSessions.white.socketId = uniquesocket.id;
-            playerSessions.white.connected = true;
-            playerSessions.white.disconnectedAt = null;
-            players.white = uniquesocket.id;
+            targetRoom.playerSessions.white.socketId = uniquesocket.id;
+            targetRoom.playerSessions.white.connected = true;
+            targetRoom.playerSessions.white.disconnectedAt = null;
+            targetRoom.players.white = uniquesocket.id;
 
             uniquesocket.emit("playerRole", "w");
-            uniquesocket.emit("reconnected", { role: "w", roleName: "White" });
-            uniquesocket.emit("gameState", getGameState());
-            uniquesocket.emit("chatHistory", chatMessages.slice(-30));
+            uniquesocket.emit("reconnected", { role: "w", roleName: "White", roomId: targetRoom.id });
+            uniquesocket.emit("gameState", targetRoom.getGameState());
+            uniquesocket.emit("chatHistory", targetRoom.chatMessages.slice(-30));
 
-            io.emit("playersUpdate", getPlayersSnapshot());
-            io.emit("playerReconnected", { role: "w", roleName: "White" });
-            io.emit("chatMessage", {
+            io.to(targetRoom.id).emit("playersUpdate", targetRoom.getPlayersSnapshot());
+            io.to(targetRoom.id).emit("playerReconnected", { role: "w", roleName: "White" });
+            io.to(targetRoom.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: "White reconnected to the match.",
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
-            console.log(`[reconnect] White reconnected with socket ${uniquesocket.id}`);
+            console.log(`[reconnect] White reconnected in room ${targetRoom.id} (${uniquesocket.id})`);
             return true;
         }
 
-        // Check if token matches Black player session
-        if (playerSessions.black && playerSessions.black.sessionToken === token) {
+        // Check if token matches Black player session in this room
+        if (targetRoom.playerSessions.black && targetRoom.playerSessions.black.sessionToken === token) {
             assignedRole = "b";
             isReconnection = true;
-            if (playerSessions.black.disconnectTimeout) {
-                clearTimeout(playerSessions.black.disconnectTimeout);
-                playerSessions.black.disconnectTimeout = null;
+            if (targetRoom.playerSessions.black.disconnectTimeout) {
+                clearTimeout(targetRoom.playerSessions.black.disconnectTimeout);
+                targetRoom.playerSessions.black.disconnectTimeout = null;
             }
-            playerSessions.black.socketId = uniquesocket.id;
-            playerSessions.black.connected = true;
-            playerSessions.black.disconnectedAt = null;
-            players.black = uniquesocket.id;
+            targetRoom.playerSessions.black.socketId = uniquesocket.id;
+            targetRoom.playerSessions.black.connected = true;
+            targetRoom.playerSessions.black.disconnectedAt = null;
+            targetRoom.players.black = uniquesocket.id;
 
             uniquesocket.emit("playerRole", "b");
-            uniquesocket.emit("reconnected", { role: "b", roleName: "Black" });
-            uniquesocket.emit("gameState", getGameState());
-            uniquesocket.emit("chatHistory", chatMessages.slice(-30));
+            uniquesocket.emit("reconnected", { role: "b", roleName: "Black", roomId: targetRoom.id });
+            uniquesocket.emit("gameState", targetRoom.getGameState());
+            uniquesocket.emit("chatHistory", targetRoom.chatMessages.slice(-30));
 
-            io.emit("playersUpdate", getPlayersSnapshot());
-            io.emit("playerReconnected", { role: "b", roleName: "Black" });
-            io.emit("chatMessage", {
+            io.to(targetRoom.id).emit("playersUpdate", targetRoom.getPlayersSnapshot());
+            io.to(targetRoom.id).emit("playerReconnected", { role: "b", roleName: "Black" });
+            io.to(targetRoom.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: "Black reconnected to the match.",
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
-            console.log(`[reconnect] Black reconnected with socket ${uniquesocket.id}`);
+            console.log(`[reconnect] Black reconnected in room ${targetRoom.id} (${uniquesocket.id})`);
             return true;
         }
 
         return false;
     }
 
-    // Try reconnecting via handshake token
-    const reconnected = handlePlayerIdentification(sessionToken);
+    // Try reconnecting via token
+    const reconnected = handlePlayerIdentification(sessionToken, room);
 
     if (!reconnected) {
-        // Seat new player or spectator
-        if (!playerSessions.white) {
+        // Assign available seats in default room, or spectator if full
+        if (!room.playerSessions.white) {
             assignedRole = "w";
-            playerSessions.white = {
+            room.playerSessions.white = {
                 sessionToken: sessionToken || ("sess_" + uniquesocket.id),
                 socketId: uniquesocket.id,
                 connected: true,
                 disconnectedAt: null,
                 disconnectTimeout: null
             };
-            players.white = uniquesocket.id;
+            room.players.white = uniquesocket.id;
             uniquesocket.emit("playerRole", "w");
-        } else if (!playerSessions.black) {
+        } else if (!room.playerSessions.black) {
             assignedRole = "b";
-            playerSessions.black = {
+            room.playerSessions.black = {
                 sessionToken: sessionToken || ("sess_" + uniquesocket.id),
                 socketId: uniquesocket.id,
                 connected: true,
                 disconnectedAt: null,
                 disconnectTimeout: null
             };
-            players.black = uniquesocket.id;
+            room.players.black = uniquesocket.id;
             uniquesocket.emit("playerRole", "b");
+        } else {
+            room.spectators.add(uniquesocket.id);
+            uniquesocket.emit("spectatorRole");
+        }
+
+        io.to(room.id).emit("playersUpdate", room.getPlayersSnapshot());
+        uniquesocket.emit("gameState", room.getGameState());
+        uniquesocket.emit("chatHistory", room.chatMessages.slice(-30));
+
+        const roleText = assignedRole === "w" ? "White (Magnus_G)" : assignedRole === "b" ? "Black (Hikaru_K)" : "Spectator";
+        io.to(room.id).emit("chatMessage", {
+            sender: "System",
+            role: "sys",
+            text: `User joined as ${roleText}`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    }
+
+    // Re-identification listener
+    uniquesocket.on("identify", (data) => {
+        if (data && data.sessionToken) {
+            const currentR = getSocketRoom(uniquesocket);
+            handlePlayerIdentification(data.sessionToken, currentR);
+        }
+    });
+
+    // ── Phase 10: Create Private Game ─────────────────────────
+    uniquesocket.on("createPrivateGame", (data) => {
+        const tcKey = (data && data.timeControl && TIME_CONTROLS[data.timeControl]) ? data.timeControl : "10+0";
+        const token = (data && data.sessionToken) || ("sess_" + uniquesocket.id);
+        let preferredColor = (data && data.preferredColor) || "w";
+        if (preferredColor === "random") {
+            preferredColor = Math.random() < 0.5 ? "w" : "b";
+        }
+
+        // Generate unique room ID e.g. ARENA-7821
+        let newRoomId;
+        do {
+            newRoomId = "ARENA-" + Math.floor(1000 + Math.random() * 9000);
+        } while (rooms.has(newRoomId));
+
+        const newRoom = new GameRoom(newRoomId, {
+            isPrivate: true,
+            timeControl: tcKey
+        });
+        rooms.set(newRoomId, newRoom);
+
+        // Transition socket to new room
+        if (uniquesocket.currentRoomId) {
+            uniquesocket.leave(uniquesocket.currentRoomId);
+        }
+        uniquesocket.join(newRoomId);
+        uniquesocket.currentRoomId = newRoomId;
+
+        // Assign creator seat correctly
+        const creatorRole = preferredColor === "b" ? "b" : "w";
+        const creatorRoleKey = creatorRole === "w" ? "white" : "black";
+
+        newRoom.players[creatorRoleKey] = uniquesocket.id;
+        newRoom.playerSessions[creatorRoleKey] = {
+            sessionToken: token,
+            socketId: uniquesocket.id,
+            connected: true,
+            disconnectedAt: null,
+            disconnectTimeout: null
+        };
+
+        uniquesocket.emit("playerRole", creatorRole);
+        uniquesocket.emit("privateGameCreated", {
+            roomId: newRoomId,
+            inviteUrl: `/?game=${newRoomId}`,
+            role: creatorRole,
+            timeControl: TIME_CONTROLS[tcKey]
+        });
+
+        uniquesocket.emit("gameState", newRoom.getGameState());
+        uniquesocket.emit("playersUpdate", newRoom.getPlayersSnapshot());
+        uniquesocket.emit("chatHistory", newRoom.chatMessages);
+
+        console.log(`[privateGame] Created ${newRoomId} by ${uniquesocket.id} as ${creatorRole} (${tcKey})`);
+    });
+
+    // ── Phase 10: Join Private Game ───────────────────────────
+    uniquesocket.on("joinPrivateGame", (data) => {
+        let inputCode = (data && data.roomId) ? data.roomId.trim().toUpperCase() : null;
+        const token = (data && data.sessionToken) || ("sess_" + uniquesocket.id);
+
+        if (!inputCode) {
+            uniquesocket.emit("privateGameError", { message: "Please provide a valid Game ID." });
+            return;
+        }
+
+        // Handle full URL inputs: extract query param or path ID
+        if (inputCode.includes("GAME=")) {
+            const match = inputCode.match(/GAME=([A-Z0-9_-]+)/i);
+            if (match) inputCode = match[1].toUpperCase();
+        } else if (inputCode.includes("ROOM=")) {
+            const match = inputCode.match(/ROOM=([A-Z0-9_-]+)/i);
+            if (match) inputCode = match[1].toUpperCase();
+        } else if (inputCode.includes("/GAME/")) {
+            const match = inputCode.match(/\/GAME\/([A-Z0-9_-]+)/i);
+            if (match) inputCode = match[1].toUpperCase();
+        }
+
+        const targetRoom = rooms.get(inputCode);
+        if (!targetRoom) {
+            uniquesocket.emit("privateGameError", { message: `Game "${inputCode}" was not found. Please verify the code.` });
+            return;
+        }
+
+        // Leave previous room and join target room
+        if (uniquesocket.currentRoomId && uniquesocket.currentRoomId !== targetRoom.id) {
+            uniquesocket.leave(uniquesocket.currentRoomId);
+        }
+        uniquesocket.join(targetRoom.id);
+        uniquesocket.currentRoomId = targetRoom.id;
+
+        let roleAssigned = null;
+        let isReconnected = false;
+
+        // 1. Check if token matches existing White or Black player
+        if (targetRoom.playerSessions.white && targetRoom.playerSessions.white.sessionToken === token) {
+            roleAssigned = "w";
+            isReconnected = true;
+            targetRoom.playerSessions.white.socketId = uniquesocket.id;
+            targetRoom.playerSessions.white.connected = true;
+            targetRoom.players.white = uniquesocket.id;
+            if (targetRoom.playerSessions.white.disconnectTimeout) {
+                clearTimeout(targetRoom.playerSessions.white.disconnectTimeout);
+                targetRoom.playerSessions.white.disconnectTimeout = null;
+            }
+        } else if (targetRoom.playerSessions.black && targetRoom.playerSessions.black.sessionToken === token) {
+            roleAssigned = "b";
+            isReconnected = true;
+            targetRoom.playerSessions.black.socketId = uniquesocket.id;
+            targetRoom.playerSessions.black.connected = true;
+            targetRoom.players.black = uniquesocket.id;
+            if (targetRoom.playerSessions.black.disconnectTimeout) {
+                clearTimeout(targetRoom.playerSessions.black.disconnectTimeout);
+                targetRoom.playerSessions.black.disconnectTimeout = null;
+            }
+        } else {
+            // 2. Not reconnecting: Assign remaining player seat correctly
+            if (!targetRoom.playerSessions.white) {
+                roleAssigned = "w";
+                targetRoom.players.white = uniquesocket.id;
+                targetRoom.playerSessions.white = {
+                    sessionToken: token,
+                    socketId: uniquesocket.id,
+                    connected: true,
+                    disconnectedAt: null,
+                    disconnectTimeout: null
+                };
+            } else if (!targetRoom.playerSessions.black) {
+                roleAssigned = "b";
+                targetRoom.players.black = uniquesocket.id;
+                targetRoom.playerSessions.black = {
+                    sessionToken: token,
+                    socketId: uniquesocket.id,
+                    connected: true,
+                    disconnectedAt: null,
+                    disconnectTimeout: null
+                };
+            } else {
+                // 3. Prevent unauthorized spectators/players from interfering
+                // Both seats occupied -> assign Spectator!
+                roleAssigned = null;
+                targetRoom.spectators.add(uniquesocket.id);
+            }
+        }
+
+        if (roleAssigned) {
+            uniquesocket.emit("playerRole", roleAssigned);
         } else {
             uniquesocket.emit("spectatorRole");
         }
 
-        // Broadcast updated player slots to everyone
-        io.emit("playersUpdate", getPlayersSnapshot());
+        uniquesocket.emit("privateGameJoined", {
+            roomId: targetRoom.id,
+            role: roleAssigned,
+            isSpectator: roleAssigned === null,
+            timeControl: TIME_CONTROLS[targetRoom.currentTimeControlKey]
+        });
 
-        // Send current game state and chat history
-        uniquesocket.emit("gameState", getGameState());
-        uniquesocket.emit("chatHistory", chatMessages.slice(-30));
+        uniquesocket.emit("gameState", targetRoom.getGameState());
+        uniquesocket.emit("chatHistory", targetRoom.chatMessages.slice(-30));
+        io.to(targetRoom.id).emit("playersUpdate", targetRoom.getPlayersSnapshot());
 
-        // System announcement for new join
-        const roleText = assignedRole === "w" ? "White (Magnus_G)" : assignedRole === "b" ? "Black (Hikaru_K)" : "Spectator";
-        const joinMsg = {
-            sender: "System",
-            role: "sys",
-            text: `New user joined as ${roleText}`,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        io.emit("chatMessage", joinMsg);
-    }
-
-    // Explicit identification endpoint for client re-identification
-    uniquesocket.on("identify", (data) => {
-        if (data && data.sessionToken) {
-            handlePlayerIdentification(data.sessionToken);
+        // When both White and Black are seated, broadcast game ready to start
+        if (targetRoom.playerSessions.white && targetRoom.playerSessions.black && !isReconnected) {
+            io.to(targetRoom.id).emit("privateGameReady", {
+                roomId: targetRoom.id,
+                message: "Friend connected! White and Black are seated.",
+                timeControl: TIME_CONTROLS[targetRoom.currentTimeControlKey]
+            });
+            io.to(targetRoom.id).emit("chatMessage", {
+                sender: "System",
+                role: "sys",
+                text: `Friend joined! White: ${targetRoom.playerProfiles.white.name} vs. Black: ${targetRoom.playerProfiles.black.name}`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
         }
+
+        console.log(`[privateGame] Socket ${uniquesocket.id} joined ${targetRoom.id} as ${roleAssigned || "Spectator"}`);
     });
 
     // ── Disconnect ────────────────────────────────────────────
     uniquesocket.on("disconnect", function () {
         console.log(`[disconnect] ${uniquesocket.id}`);
+        const room = getSocketRoom(uniquesocket);
+
         let leftRole = null;
         let session = null;
         let roleKey = null;
 
-        if (playerSessions.white && playerSessions.white.socketId === uniquesocket.id) {
+        if (room.playerSessions.white && room.playerSessions.white.socketId === uniquesocket.id) {
             leftRole = "White";
-            session = playerSessions.white;
+            session = room.playerSessions.white;
             roleKey = "white";
-        } else if (playerSessions.black && playerSessions.black.socketId === uniquesocket.id) {
+        } else if (room.playerSessions.black && room.playerSessions.black.socketId === uniquesocket.id) {
             leftRole = "Black";
-            session = playerSessions.black;
+            session = room.playerSessions.black;
             roleKey = "black";
+        } else {
+            room.spectators.delete(uniquesocket.id);
         }
 
         if (leftRole && session) {
@@ -390,21 +605,17 @@ io.on("connection", function (uniquesocket) {
             const opponentChar = leftRole === "White" ? "b" : "w";
             const opponentRoleName = leftRole === "White" ? "Black" : "White";
 
-            // Broadcast disconnected state to clients
-            io.emit("playersUpdate", getPlayersSnapshot());
-            io.emit("playerDisconnected", { role: roleChar, roleName: leftRole });
-            io.emit("chatMessage", {
+            io.to(room.id).emit("playersUpdate", room.getPlayersSnapshot());
+            io.to(room.id).emit("playerDisconnected", { role: roleChar, roleName: leftRole });
+            io.to(room.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: `${leftRole} disconnected. Waiting for reconnection...`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
 
-            // Production Reconnection Grace Period:
-            // If match hasn't started (0 moves): 20 seconds grace before abort
-            // If match is active (>0 moves): 60 seconds grace before forfeit by abandonment
-            const movesCount = chess.history().length;
-            const graceMs = (!isGameFinished() && movesCount === 0) ? 20000 : 60000;
+            const movesCount = room.chess.history().length;
+            const graceMs = (!room.isGameFinished() && movesCount === 0) ? 20000 : 60000;
 
             if (session.disconnectTimeout) {
                 clearTimeout(session.disconnectTimeout);
@@ -412,19 +623,19 @@ io.on("connection", function (uniquesocket) {
 
             session.disconnectTimeout = setTimeout(() => {
                 if (!session.connected) {
-                    console.log(`[grace timeout] ${leftRole} failed to reconnect within grace period`);
-                    if (!isGameFinished()) {
-                        isGameOverState = true;
-                        stopClock();
+                    console.log(`[grace timeout] ${leftRole} failed to reconnect in ${room.id}`);
+                    if (!room.isGameFinished()) {
+                        room.isGameOverState = true;
+                        room.stopClock();
                         if (movesCount === 0) {
-                            io.emit("gameOver", {
+                            io.to(room.id).emit("gameOver", {
                                 gameOver: true,
                                 type: "aborted",
                                 winner: null,
                                 message: `Game aborted — ${leftRole} disconnected before the first move.`
                             });
                         } else {
-                            io.emit("gameOver", {
+                            io.to(room.id).emit("gameOver", {
                                 gameOver: true,
                                 type: "abandonment",
                                 winner: opponentChar,
@@ -432,14 +643,14 @@ io.on("connection", function (uniquesocket) {
                             });
                         }
                     }
-                    playerSessions[roleKey] = null;
-                    players[roleKey] = null;
-                    io.emit("playersUpdate", getPlayersSnapshot());
+                    room.playerSessions[roleKey] = null;
+                    room.players[roleKey] = null;
+                    io.to(room.id).emit("playersUpdate", room.getPlayersSnapshot());
                 }
             }, graceMs);
         }
 
-        // Clean up from matchmaking queue if waiting
+        // Clean up from matchmaking queue
         matchmakingQueue = matchmakingQueue.filter(q => q.socketId !== uniquesocket.id);
     });
 
@@ -448,32 +659,39 @@ io.on("connection", function (uniquesocket) {
         const tcKey = (data && data.timeControl && TIME_CONTROLS[data.timeControl]) ? data.timeControl : "10+0";
         const token = (data && data.sessionToken) || ("sess_" + uniquesocket.id);
 
-        // Remove any prior queue entries for this socket/token
         matchmakingQueue = matchmakingQueue.filter(q => q.socketId !== uniquesocket.id && q.sessionToken !== token);
-
-        // Check if there is an opponent waiting in queue for the same time control
         const oppIdx = matchmakingQueue.findIndex(q => q.sessionToken !== token && q.socketId !== uniquesocket.id && q.timeControl === tcKey);
 
         if (oppIdx !== -1) {
             const matchedOpponent = matchmakingQueue.splice(oppIdx, 1)[0];
             const oppSocket = io.sockets.sockets.get(matchedOpponent.socketId);
 
-            currentTimeControlKey = tcKey;
-            chess = new Chess();
-            isGameOverState = false;
-            resetClocks();
-            drawOffer = null;
-            rematchOffer = null;
+            // Create dedicated match room for paired players
+            const matchRoomId = "MATCH-" + Date.now().toString(36).toUpperCase();
+            const matchRoom = new GameRoom(matchRoomId, {
+                timeControl: tcKey
+            });
+            rooms.set(matchRoomId, matchRoom);
 
-            // Assign White to waiting opponent, Black to current player
-            playerSessions.white = {
+            if (oppSocket) {
+                if (oppSocket.currentRoomId) oppSocket.leave(oppSocket.currentRoomId);
+                oppSocket.join(matchRoomId);
+                oppSocket.currentRoomId = matchRoomId;
+            }
+
+            if (uniquesocket.currentRoomId) uniquesocket.leave(uniquesocket.currentRoomId);
+            uniquesocket.join(matchRoomId);
+            uniquesocket.currentRoomId = matchRoomId;
+
+            // Assign White to opponent, Black to current player
+            matchRoom.playerSessions.white = {
                 sessionToken: matchedOpponent.sessionToken,
                 socketId: matchedOpponent.socketId,
                 connected: true,
                 disconnectedAt: null,
                 disconnectTimeout: null
             };
-            playerSessions.black = {
+            matchRoom.playerSessions.black = {
                 sessionToken: token,
                 socketId: uniquesocket.id,
                 connected: true,
@@ -481,36 +699,37 @@ io.on("connection", function (uniquesocket) {
                 disconnectTimeout: null
             };
 
-            players.white = matchedOpponent.socketId;
-            players.black = uniquesocket.id;
+            matchRoom.players.white = matchedOpponent.socketId;
+            matchRoom.players.black = uniquesocket.id;
 
             if (oppSocket) {
                 oppSocket.emit("playerRole", "w");
                 oppSocket.emit("matchFound", {
                     role: "w",
-                    opponent: playerProfiles.black,
-                    timeControl: TIME_CONTROLS[tcKey]
+                    opponent: matchRoom.playerProfiles.black,
+                    timeControl: TIME_CONTROLS[tcKey],
+                    roomId: matchRoomId
                 });
             }
 
             uniquesocket.emit("playerRole", "b");
             uniquesocket.emit("matchFound", {
                 role: "b",
-                opponent: playerProfiles.white,
-                timeControl: TIME_CONTROLS[tcKey]
+                opponent: matchRoom.playerProfiles.white,
+                timeControl: TIME_CONTROLS[tcKey],
+                roomId: matchRoomId
             });
 
-            io.emit("playersUpdate", getPlayersSnapshot());
-            io.emit("newGame", getGameState());
-            io.emit("chatMessage", {
+            io.to(matchRoomId).emit("playersUpdate", matchRoom.getPlayersSnapshot());
+            io.to(matchRoomId).emit("newGame", matchRoom.getGameState());
+            io.to(matchRoomId).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
-                text: `Match found! White: ${playerProfiles.white.name} vs. Black: ${playerProfiles.black.name} (${TIME_CONTROLS[tcKey].label})`,
+                text: `Match found! White: ${matchRoom.playerProfiles.white.name} vs. Black: ${matchRoom.playerProfiles.black.name} (${TIME_CONTROLS[tcKey].label})`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
-            console.log(`[matchmaking] Paired ${matchedOpponent.socketId} (w) with ${uniquesocket.id} (b) for ${tcKey}`);
+            console.log(`[matchmaking] Paired ${matchedOpponent.socketId} (w) with ${uniquesocket.id} (b) in ${matchRoomId}`);
         } else {
-            // Queue current player
             matchmakingQueue.push({
                 socketId: uniquesocket.id,
                 sessionToken: token,
@@ -529,19 +748,23 @@ io.on("connection", function (uniquesocket) {
     uniquesocket.on("cancelMatchmaking", () => {
         matchmakingQueue = matchmakingQueue.filter(q => q.socketId !== uniquesocket.id);
         uniquesocket.emit("matchmakingCancelled");
-        console.log(`[matchmaking] Socket ${uniquesocket.id} cancelled search.`);
     });
 
     // ── Set Time Control ──────────────────────────────────────
     uniquesocket.on("setTimeControl", (key) => {
-        if (!TIME_CONTROLS[key]) return;
-        // Allow time control change if game hasn't started (no moves played and clocks idle)
-        if (chess.history().length === 0 && !clockState.active) {
-            currentTimeControlKey = key;
-            resetClocks();
-            const snapshot = getClockSnapshot();
-            io.emit("timeControlChanged", snapshot);
-            io.emit("chatMessage", {
+        const room = getSocketRoom(uniquesocket);
+        if (!TIME_CONTROLS[key] || !room) return;
+
+        // Security check: Prevent spectators from changing time control
+        const isPlayer = uniquesocket.id === room.players.white || uniquesocket.id === room.players.black;
+        if (!isPlayer) return;
+
+        if (room.chess.history().length === 0 && !room.clockState.active) {
+            room.currentTimeControlKey = key;
+            room.resetClocks();
+            const snapshot = room.getClockSnapshot();
+            io.to(room.id).emit("timeControlChanged", snapshot);
+            io.to(room.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: `Time control set to ${TIME_CONTROLS[key].label}`,
@@ -550,83 +773,85 @@ io.on("connection", function (uniquesocket) {
         }
     });
 
-    // ── Move ──────────────────────────────────────────────────
+    // ── Move (With Security & Spectator Isolation) ────────────
     uniquesocket.on("move", (move) => {
-        try {
-            // Validate correct player's turn
-            if (chess.turn() === "w" && uniquesocket.id !== players.white) return;
-            if (chess.turn() === "b" && uniquesocket.id !== players.black) return;
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
 
-            // Deduct elapsed time from moving player
-            const movingColor = chess.turn();
-            if (clockState.active && clockState.lastTurnTimestamp) {
-                const elapsed = Date.now() - clockState.lastTurnTimestamp;
-                clockState[movingColor] = Math.max(0, clockState[movingColor] - elapsed);
+        // Security check: Prevent unauthorized spectators or non-players from interfering
+        const isPlayer = uniquesocket.id === room.players.white || uniquesocket.id === room.players.black;
+        if (!isPlayer) {
+            uniquesocket.emit("unauthorizedAction", { message: "Spectators are not permitted to make moves." });
+            return;
+        }
 
-                // Detect timeout before move can complete
-                if (clockState[movingColor] <= 0) {
-                    stopClock();
-                    const winner = movingColor === "w" ? "b" : "w";
-                    const hasInsufficient = chess.isInsufficientMaterial();
-                    io.emit("gameOver", {
-                        gameOver: true,
-                        type: "timeout",
-                        winner: hasInsufficient ? null : winner,
-                        message: hasInsufficient
-                            ? "Draw — timeout with insufficient material!"
-                            : `${movingColor === "w" ? "Black" : "White"} wins on time!`
-                    });
-                    io.emit("clockSync", getClockSnapshot());
-                    return;
-                }
+        // Validate correct player's turn
+        if (room.chess.turn() === "w" && uniquesocket.id !== room.players.white) return;
+        if (room.chess.turn() === "b" && uniquesocket.id !== room.players.black) return;
+
+        // Deduct elapsed time from moving player
+        const movingColor = room.chess.turn();
+        if (room.clockState.active && room.clockState.lastTurnTimestamp) {
+            const elapsed = Date.now() - room.clockState.lastTurnTimestamp;
+            room.clockState[movingColor] = Math.max(0, room.clockState[movingColor] - elapsed);
+
+            if (room.clockState[movingColor] <= 0) {
+                room.stopClock();
+                const winner = movingColor === "w" ? "b" : "w";
+                const hasInsufficient = room.chess.isInsufficientMaterial();
+                io.to(room.id).emit("gameOver", {
+                    gameOver: true,
+                    type: "timeout",
+                    winner: hasInsufficient ? null : winner,
+                    message: hasInsufficient
+                        ? "Draw — timeout with insufficient material!"
+                        : `${movingColor === "w" ? "Black" : "White"} wins on time!`
+                });
+                io.to(room.id).emit("clockSync", room.getClockSnapshot());
+                return;
             }
+        }
 
-            const result = chess.move(move);
+        try {
+            const result = room.chess.move(move);
             if (result) {
-                const tc = TIME_CONTROLS[currentTimeControlKey] || TIME_CONTROLS["10+0"];
+                const tc = TIME_CONTROLS[room.currentTimeControlKey] || TIME_CONTROLS["10+0"];
 
-                // Add increment to the player who just made a move
-                if (tc.increment > 0 && clockState.active) {
-                    clockState[result.color] += tc.increment * 1000;
+                if (tc.increment > 0 && room.clockState.active) {
+                    room.clockState[result.color] += tc.increment * 1000;
                 }
 
-                // Start clock if not already active
-                if (!clockState.active && !chess.isGameOver()) {
-                    startClock();
+                if (!room.clockState.active && !room.chess.isGameOver()) {
+                    room.startClock();
                 } else {
-                    // Update turn timestamp for the opponent
-                    clockState.lastTurnTimestamp = Date.now();
+                    room.clockState.lastTurnTimestamp = Date.now();
                 }
 
-                // Reset any pending draw offer on move
-                drawOffer = null;
+                room.drawOffer = null;
 
-                // Broadcast move with authoritative clock snapshot
-                io.emit("move", {
+                io.to(room.id).emit("move", {
                     from: result.from,
                     to: result.to,
                     promotion: result.promotion,
                     san: result.san,
                     captured: result.captured || null,
                     color: result.color,
-                    isCheck: chess.isCheck(),
-                    fen: chess.fen(),
-                    history: chess.history({ verbose: true }),
-                    clocks: getClockSnapshot(),
+                    isCheck: room.chess.isCheck(),
+                    fen: room.chess.fen(),
+                    history: room.chess.history({ verbose: true }),
+                    clocks: room.getClockSnapshot(),
                     increment: tc.increment > 0 ? { color: result.color, amount: tc.increment } : null
                 });
 
-                io.emit("boardState", chess.fen());
+                io.to(room.id).emit("boardState", room.chess.fen());
 
-                // Check for game-over
-                const gameOverResult = checkGameOver();
+                const gameOverResult = room.checkGameOver();
                 if (gameOverResult) {
-                    isGameOverState = true;
-                    stopClock();
-                    io.emit("gameOver", gameOverResult);
+                    room.isGameOverState = true;
+                    room.stopClock();
+                    io.to(room.id).emit("gameOver", gameOverResult);
                 }
             } else {
-                console.log("invalid move:", move);
                 uniquesocket.emit("invalidMove", move);
             }
         } catch (err) {
@@ -634,21 +859,24 @@ io.on("connection", function (uniquesocket) {
         }
     });
 
-    // ── Resign ────────────────────────────────────────────────
+    // ── Resign (Security Protected) ───────────────────────────
     uniquesocket.on("resign", () => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
         let resignColor = null;
-        if (uniquesocket.id === players.white) resignColor = "w";
-        else if (uniquesocket.id === players.black) resignColor = "b";
-        else return; // Spectators can't resign
+        if (uniquesocket.id === room.players.white) resignColor = "w";
+        else if (uniquesocket.id === room.players.black) resignColor = "b";
+        else return; // Unauthorized spectator cannot resign
 
-        if (isGameFinished()) return; // Game already over
+        if (room.isGameFinished()) return;
 
-        isGameOverState = true;
-        stopClock();
+        room.isGameOverState = true;
+        room.stopClock();
         const winner = resignColor === "w" ? "b" : "w";
-        const resignerName = resignColor === "w" ? playerProfiles.white.name : playerProfiles.black.name;
-        
-        io.emit("gameOver", {
+        const resignerName = resignColor === "w" ? room.playerProfiles.white.name : room.playerProfiles.black.name;
+
+        io.to(room.id).emit("gameOver", {
             gameOver: true,
             type: "resignation",
             winner: winner,
@@ -658,7 +886,7 @@ io.on("connection", function (uniquesocket) {
                     : `White wins — ${resignerName} resigned!`,
         });
 
-        io.emit("chatMessage", {
+        io.to(room.id).emit("chatMessage", {
             sender: "System",
             role: "sys",
             text: `${resignerName} (${resignColor === "w" ? "White" : "Black"}) resigned`,
@@ -666,33 +894,35 @@ io.on("connection", function (uniquesocket) {
         });
     });
 
-    // ── Draw Offer ────────────────────────────────────────────
+    // ── Draw Offer (Security Protected) ───────────────────────
     uniquesocket.on("offerDraw", () => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
         let offerColor = null;
-        if (uniquesocket.id === players.white) offerColor = "w";
-        else if (uniquesocket.id === players.black) offerColor = "b";
-        else return;
+        if (uniquesocket.id === room.players.white) offerColor = "w";
+        else if (uniquesocket.id === room.players.black) offerColor = "b";
+        else return; // Unauthorized spectator
 
-        if (isGameFinished() || chess.history().length === 0) return;
+        if (room.isGameFinished() || room.chess.history().length === 0) return;
 
-        if (drawOffer && drawOffer !== offerColor) {
-            // Both offered draw -> draw agreed
-            isGameOverState = true;
-            stopClock();
-            io.emit("gameOver", {
+        if (room.drawOffer && room.drawOffer !== offerColor) {
+            room.isGameOverState = true;
+            room.stopClock();
+            io.to(room.id).emit("gameOver", {
                 gameOver: true,
                 type: "draw",
                 winner: null,
                 message: "Draw agreed by both players!"
             });
-            drawOffer = null;
-        } else if (!drawOffer) {
-            drawOffer = offerColor;
-            const targetSocket = offerColor === "w" ? players.black : players.white;
+            room.drawOffer = null;
+        } else if (!room.drawOffer) {
+            room.drawOffer = offerColor;
+            const targetSocket = offerColor === "w" ? room.players.black : room.players.white;
             if (targetSocket) {
                 io.to(targetSocket).emit("drawOffered", { by: offerColor });
             }
-            io.emit("chatMessage", {
+            io.to(room.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: `${offerColor === "w" ? "White" : "Black"} offered a draw`,
@@ -702,24 +932,27 @@ io.on("connection", function (uniquesocket) {
     });
 
     uniquesocket.on("acceptDraw", () => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
         let acceptColor = null;
-        if (uniquesocket.id === players.white) acceptColor = "w";
-        else if (uniquesocket.id === players.black) acceptColor = "b";
+        if (uniquesocket.id === room.players.white) acceptColor = "w";
+        else if (uniquesocket.id === room.players.black) acceptColor = "b";
         else return;
 
-        if (isGameFinished()) return;
+        if (room.isGameFinished()) return;
 
-        if (drawOffer && drawOffer !== acceptColor) {
-            isGameOverState = true;
-            stopClock();
-            io.emit("gameOver", {
+        if (room.drawOffer && room.drawOffer !== acceptColor) {
+            room.isGameOverState = true;
+            room.stopClock();
+            io.to(room.id).emit("gameOver", {
                 gameOver: true,
                 type: "draw",
                 winner: null,
                 message: "Draw agreed by both players!"
             });
-            drawOffer = null;
-            io.emit("chatMessage", {
+            room.drawOffer = null;
+            io.to(room.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: "Draw accepted by mutual agreement",
@@ -729,13 +962,16 @@ io.on("connection", function (uniquesocket) {
     });
 
     uniquesocket.on("declineDraw", () => {
-        if (drawOffer) {
-            const offerer = drawOffer === "w" ? players.white : players.black;
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
+        if (room.drawOffer) {
+            const offerer = room.drawOffer === "w" ? room.players.white : room.players.black;
             if (offerer) {
                 io.to(offerer).emit("drawDeclined");
             }
-            drawOffer = null;
-            io.emit("chatMessage", {
+            room.drawOffer = null;
+            io.to(room.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: "Draw offer declined",
@@ -744,30 +980,32 @@ io.on("connection", function (uniquesocket) {
         }
     });
 
-    // ── Leave Game ────────────────────────────────────────────
+    // ── Leave Game (Security Protected) ───────────────────────
     uniquesocket.on("leaveGame", () => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
         let leftColor = null;
-        if (uniquesocket.id === players.white) leftColor = "w";
-        else if (uniquesocket.id === players.black) leftColor = "b";
+        if (uniquesocket.id === room.players.white) leftColor = "w";
+        else if (uniquesocket.id === room.players.black) leftColor = "b";
         else return;
 
         const leftRoleName = leftColor === "w" ? "White" : "Black";
         const opponentColor = leftColor === "w" ? "b" : "w";
         const opponentRoleName = opponentColor === "w" ? "White" : "Black";
 
-        // If game was actively underway or pending, handle forfeit or abort
-        if (!isGameFinished()) {
-            isGameOverState = true;
-            stopClock();
-            if (chess.history().length === 0) {
-                io.emit("gameOver", {
+        if (!room.isGameFinished()) {
+            room.isGameOverState = true;
+            room.stopClock();
+            if (room.chess.history().length === 0) {
+                io.to(room.id).emit("gameOver", {
                     gameOver: true,
                     type: "aborted",
                     winner: null,
                     message: `Game aborted — ${leftRoleName} left before the match began.`
                 });
             } else {
-                io.emit("gameOver", {
+                io.to(room.id).emit("gameOver", {
                     gameOver: true,
                     type: "abandonment",
                     winner: opponentColor,
@@ -776,25 +1014,22 @@ io.on("connection", function (uniquesocket) {
             }
         }
 
-        // Vacate seat
         const roleKey = leftColor === "w" ? "white" : "black";
-        if (playerSessions[roleKey] && playerSessions[roleKey].disconnectTimeout) {
-            clearTimeout(playerSessions[roleKey].disconnectTimeout);
+        if (room.playerSessions[roleKey] && room.playerSessions[roleKey].disconnectTimeout) {
+            clearTimeout(room.playerSessions[roleKey].disconnectTimeout);
         }
-        playerSessions[roleKey] = null;
-        players[roleKey] = null;
+        room.playerSessions[roleKey] = null;
+        room.players[roleKey] = null;
+        room.spectators.add(uniquesocket.id);
 
-        drawOffer = null;
-        rematchOffer = null;
+        room.drawOffer = null;
+        room.rematchOffer = null;
 
-        // Transition leaver to spectator
         uniquesocket.emit("spectatorRole");
         uniquesocket.emit("leftGameSuccess");
 
-        // Broadcast updated seats
-        io.emit("playersUpdate", getPlayersSnapshot());
-
-        io.emit("chatMessage", {
+        io.to(room.id).emit("playersUpdate", room.getPlayersSnapshot());
+        io.to(room.id).emit("chatMessage", {
             sender: "System",
             role: "sys",
             text: `${leftRoleName} left their seat and is now spectating`,
@@ -802,26 +1037,28 @@ io.on("connection", function (uniquesocket) {
         });
     });
 
-    // ── Rematch ───────────────────────────────────────────────
+    // ── Rematch (Security Protected) ──────────────────────────
     uniquesocket.on("offerRematch", () => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
         let callerColor = null;
-        if (uniquesocket.id === players.white) callerColor = "w";
-        else if (uniquesocket.id === players.black) callerColor = "b";
+        if (uniquesocket.id === room.players.white) callerColor = "w";
+        else if (uniquesocket.id === room.players.black) callerColor = "b";
         else return;
 
-        // Rematch only valid when current game is finished
-        if (!isGameFinished()) return;
+        if (!room.isGameFinished()) return;
 
-        const targetSocket = callerColor === "w" ? players.black : players.white;
+        const targetSocket = callerColor === "w" ? room.players.black : room.players.white;
         if (!targetSocket) {
             uniquesocket.emit("rematchDeclined", { reason: "Opponent has left the game." });
             return;
         }
 
-        rematchOffer = callerColor;
+        room.rematchOffer = callerColor;
         io.to(targetSocket).emit("rematchOffered", { by: callerColor });
 
-        io.emit("chatMessage", {
+        io.to(room.id).emit("chatMessage", {
             sender: "System",
             role: "sys",
             text: `${callerColor === "w" ? "White" : "Black"} offered a rematch`,
@@ -830,55 +1067,59 @@ io.on("connection", function (uniquesocket) {
     });
 
     uniquesocket.on("acceptRematch", () => {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
         let acceptColor = null;
-        if (uniquesocket.id === players.white) acceptColor = "w";
-        else if (uniquesocket.id === players.black) acceptColor = "b";
+        if (uniquesocket.id === room.players.white) acceptColor = "w";
+        else if (uniquesocket.id === room.players.black) acceptColor = "b";
         else return;
 
-        if (!isGameFinished() || !rematchOffer || rematchOffer === acceptColor) return;
+        if (!room.isGameFinished() || !room.rematchOffer || room.rematchOffer === acceptColor) return;
 
         // Swap seats (standard rematch convention: colors switch)
-        const oldWhiteSession = playerSessions.white;
-        const oldBlackSession = playerSessions.black;
-        playerSessions.white = oldBlackSession;
-        playerSessions.black = oldWhiteSession;
+        const oldWhiteSession = room.playerSessions.white;
+        const oldBlackSession = room.playerSessions.black;
+        room.playerSessions.white = oldBlackSession;
+        room.playerSessions.black = oldWhiteSession;
 
-        players.white = playerSessions.white ? playerSessions.white.socketId : null;
-        players.black = playerSessions.black ? playerSessions.black.socketId : null;
+        room.players.white = room.playerSessions.white ? room.playerSessions.white.socketId : null;
+        room.players.black = room.playerSessions.black ? room.playerSessions.black.socketId : null;
 
-        // Also swap profiles for player bar display
-        const tempProf = playerProfiles.white;
-        playerProfiles.white = playerProfiles.black;
-        playerProfiles.black = tempProf;
+        const tempProf = room.playerProfiles.white;
+        room.playerProfiles.white = room.playerProfiles.black;
+        room.playerProfiles.black = tempProf;
 
-        chess = new Chess();
-        isGameOverState = false;
-        resetClocks();
-        drawOffer = null;
-        rematchOffer = null;
+        room.chess = new Chess();
+        room.isGameOverState = false;
+        room.resetClocks();
+        room.drawOffer = null;
+        room.rematchOffer = null;
 
-        if (players.white) io.to(players.white).emit("playerRole", "w");
-        if (players.black) io.to(players.black).emit("playerRole", "b");
+        if (room.players.white) io.to(room.players.white).emit("playerRole", "w");
+        if (room.players.black) io.to(room.players.black).emit("playerRole", "b");
 
-        io.emit("playersUpdate", getPlayersSnapshot());
-
-        io.emit("newGame", getGameState());
-        io.emit("chatMessage", {
+        io.to(room.id).emit("playersUpdate", room.getPlayersSnapshot());
+        io.to(room.id).emit("newGame", room.getGameState());
+        io.to(room.id).emit("chatMessage", {
             sender: "System",
             role: "sys",
-            text: `Rematch started with swapped colors! ${TIME_CONTROLS[currentTimeControlKey].label} on the clock.`,
+            text: `Rematch started with swapped colors! ${TIME_CONTROLS[room.currentTimeControlKey].label} on the clock.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
     });
 
     uniquesocket.on("declineRematch", () => {
-        if (rematchOffer) {
-            const offerer = rematchOffer === "w" ? players.white : players.black;
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
+        if (room.rematchOffer) {
+            const offerer = room.rematchOffer === "w" ? room.players.white : room.players.black;
             if (offerer) {
                 io.to(offerer).emit("rematchDeclined");
             }
-            rematchOffer = null;
-            io.emit("chatMessage", {
+            room.rematchOffer = null;
+            io.to(room.id).emit("chatMessage", {
                 sender: "System",
                 role: "sys",
                 text: "Rematch offer declined",
@@ -889,56 +1130,58 @@ io.on("connection", function (uniquesocket) {
 
     // ── Chat Message ──────────────────────────────────────────
     uniquesocket.on("chatMessage", (text) => {
-        if (!text || typeof text !== "string" || !text.trim()) return;
+        const room = getSocketRoom(uniquesocket);
+        if (!room || !text || typeof text !== "string" || !text.trim()) return;
 
         let senderName = "Spectator";
         let senderRole = "spectator";
 
-        if (uniquesocket.id === players.white) {
-            senderName = playerProfiles.white.name;
+        if (uniquesocket.id === room.players.white) {
+            senderName = room.playerProfiles.white.name;
             senderRole = "white";
-        } else if (uniquesocket.id === players.black) {
-            senderName = playerProfiles.black.name;
+        } else if (uniquesocket.id === room.players.black) {
+            senderName = room.playerProfiles.black.name;
             senderRole = "black";
         }
 
         const messageObj = {
             sender: senderName,
             role: senderRole,
-            text: text.trim().slice(0, 200), // prevent huge messages
+            text: text.trim().slice(0, 200),
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
 
-        chatMessages.push(messageObj);
-        if (chatMessages.length > 100) chatMessages.shift();
+        room.chatMessages.push(messageObj);
+        if (room.chatMessages.length > 100) room.chatMessages.shift();
 
-        io.emit("chatMessage", messageObj);
+        io.to(room.id).emit("chatMessage", messageObj);
     });
 
-    // ── New Game ──────────────────────────────────────────────
+    // ── New Game (Security Protected) ─────────────────────────
     uniquesocket.on("newGame", () => {
-        if (
-            players.white &&
-            players.black &&
-            uniquesocket.id !== players.white &&
-            uniquesocket.id !== players.black
-        ) {
+        const room = getSocketRoom(uniquesocket);
+        if (!room) return;
+
+        // Only seated players can trigger new game if players are seated
+        const isWhite = uniquesocket.id === room.players.white;
+        const isBlack = uniquesocket.id === room.players.black;
+        if (room.players.white && room.players.black && !isWhite && !isBlack) {
             return;
         }
 
-        chess = new Chess();
-        isGameOverState = false;
-        resetClocks();
-        drawOffer = null;
-        rematchOffer = null;
-        io.emit("newGame", getGameState());
-        io.emit("chatMessage", {
+        room.chess = new Chess();
+        room.isGameOverState = false;
+        room.resetClocks();
+        room.drawOffer = null;
+        room.rematchOffer = null;
+
+        io.to(room.id).emit("newGame", room.getGameState());
+        io.to(room.id).emit("chatMessage", {
             sender: "System",
             role: "sys",
-            text: `New game started! ${TIME_CONTROLS[currentTimeControlKey].label} on the clock.`,
+            text: `New game started! ${TIME_CONTROLS[room.currentTimeControlKey].label} on the clock.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
-        console.log("[newGame] Game reset");
     });
 });
 

@@ -82,6 +82,26 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Seamless View Switching & Active Match Indicator:**
     - Instant switching between `#lobbyView` and `#gameView` without page reload or socket disruption
     - Persistent glowing **"Active Match ➔"** navbar button allowing players to browse the lobby and return to ongoing games at any time
+- **Phase 10 Private Games & Anti-Interference Security** — Complete private room and friend match architecture:
+  - **Create Game Flow:**
+    - Time Control & Preferred Color selection (White / Black / Random)
+    - Generates unique Game ID (`ARENA-XXXX`) and direct invite link (`http://localhost:3000/?game=ARENA-XXXX`)
+    - Modal presents:
+      ```
+      Game created.
+      Share with your friend:
+      [ COPY INVITE LINK ]
+      ```
+    - Live waiting indicator: `Waiting for your friend to join...`
+  - **Friend Joins & Correct Role Assignment:**
+    - Friend joins via direct link or code entry in **Join Game** modal
+    - Creator & Friend assigned correctly (e.g. Creator = White, Friend = Black)
+    - Automatically launches match and alerts both players: `Friend connected! Match starting.`
+  - **Unauthorized Spectator & Player Interference Protection:**
+    - Any 3rd+ visitor joining the private game is placed into **Spectator Mode**
+    - Spectators are completely blocked from piece movements, drag-and-drop, resigning, draw offers, and resetting clocks
+    - Explicit server-side validation strictly verifies socket identity against seated players, returning `unauthorizedAction` on any illicit action
+    - Active game banner displays private room code, one-click copy button, and `👁️ Spectator Mode` status badge
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -198,6 +218,11 @@ setTimeControl                    playerReconnected {role, roleName}
 identify {sessionToken}           reconnected {role, roleName}
 findMatch {timeControl, token}    matchmakingStarted {timeControl, label}
 cancelMatchmaking                 matchmakingCancelled
+createPrivateGame {tc, color}     privateGameCreated {roomId, inviteUrl, role, tc}
+joinPrivateGame {roomId, token}   privateGameJoined {roomId, role, isSpectator}
+                                  privateGameReady {roomId, message, timeControl}
+                                  privateGameError {message}
+                                  unauthorizedAction {message}
                                   matchFound {role, opponent, timeControl}
                                   gameOver {type, winner, message}
                                   newGame {fen, turn, ...}
@@ -218,8 +243,9 @@ cancelMatchmaking                 matchmakingCancelled
 | **Phase 7** | Comprehensive Game States (Waiting, Starting, Active, Check, Checkmate, Draw, Stalemate, Timeout, Resigned, Aborted, Disconnected, Finished) | ✅ Complete |
 | **Phase 8** | Real-Time Reconnection (Persistent Session Tokens, Preserved Game State & Clocks, Resynchronization, Anti-Duplicate Architecture) | ✅ Complete |
 | **Phase 9** | Game Lobby & Matchmaking (Homepage Lobby, Time Control Selectors, Radar Search, Friendly Games, Puzzles, History, Profile) | ✅ Complete |
-| **Phase 10** | ELO ratings, leaderboards, player profiles | 📋 Planned |
-| **Phase 11** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 10** | Private Games & Anti-Interference (Create Game, Shareable Invite Link, Join Game, Correct Roles, Spectator Lockout) | ✅ Complete |
+| **Phase 11** | ELO ratings, leaderboards, player profiles | 📋 Planned |
+| **Phase 12** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 

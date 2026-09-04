@@ -287,6 +287,20 @@
         <main class="main-layout" id="gameView" style="display: none;">
             <!-- ── Left/Center: Game Viewport ── -->
             <section class="game-viewport">
+                <!-- Private Match Header Banner (Phase 10) -->
+                <div class="private-room-bar" id="privateRoomBar" style="display: none;">
+                    <div class="room-pill">
+                        <span class="lock-icon">🔒</span>
+                        <span>Private Game: <strong id="gameRoomCode">ARENA-0000</strong></span>
+                    </div>
+                    <button class="btn-copy-code-pill" id="btnCopyRoomCode" title="Copy Invite Link">
+                        📋 Copy Link
+                    </button>
+                    <div class="spectator-indicator-pill" id="spectatorIndicatorPill" style="display: none;">
+                        👁️ Spectator Mode (Interactions Disabled)
+                    </div>
+                </div>
+
                 <!-- Opponent Strip -->
                 <div class="player-strip opponent" id="opponentBar">
                     <div class="player-meta">
@@ -626,33 +640,84 @@
         </div>
     </div>
 
-    <!-- ─── Play With Friend Modal ─────────────────────────────── -->
-    <div class="modal-overlay" id="playFriendModal">
+    <!-- ─── Create Game Modal (Phase 10) ────────────────────────── -->
+    <div class="modal-overlay" id="createGameModal">
         <div class="modal">
-            <div class="modal-icon text-blue">👥</div>
-            <div class="modal-title">Play with a Friend</div>
-            <div class="modal-message">Share this direct invite link or game code with your friend to play:</div>
-            <div class="share-box">
-                <input type="text" id="friendInviteLink" readonly value="http://localhost:3000?room=ARENA-7821">
-                <button class="btn btn-primary-action" id="btnCopyInviteLink">Copy Link</button>
+            <div class="modal-icon text-emerald">⚡</div>
+            <div class="modal-title">Create Private Game</div>
+            <div class="modal-message">Set up a match and invite a friend to play:</div>
+            
+            <div class="config-row">
+                <label class="config-label">Time Control</label>
+                <select id="createGameTcSelect" class="config-select">
+                    <optgroup label="Bullet">
+                        <option value="1+0">1+0 • Bullet</option>
+                        <option value="2+1">2+1 • Bullet</option>
+                    </optgroup>
+                    <optgroup label="Blitz">
+                        <option value="3+0">3+0 • Blitz</option>
+                        <option value="3+2">3+2 • Blitz</option>
+                        <option value="5+0">5+0 • Blitz</option>
+                    </optgroup>
+                    <optgroup label="Rapid">
+                        <option value="10+0" selected>10+0 • Rapid (Default)</option>
+                        <option value="10+5">10+5 • Rapid</option>
+                        <option value="15+10">15+10 • Rapid</option>
+                    </optgroup>
+                    <optgroup label="Classical">
+                        <option value="30+0">30+0 • Classical</option>
+                    </optgroup>
+                </select>
             </div>
-            <div class="room-code-display">
-                Room Code: <strong id="friendRoomCode">ARENA-7821</strong>
+
+            <div class="config-row">
+                <label class="config-label">Play As</label>
+                <div class="color-picker-row">
+                    <button type="button" class="btn-color-pick selected" data-color="w">⚪ White</button>
+                    <button type="button" class="btn-color-pick" data-color="random">🎲 Random</button>
+                    <button type="button" class="btn-color-pick" data-color="b">⚫ Black</button>
+                </div>
             </div>
-            <div class="modal-actions">
-                <button class="btn btn-decline" id="btnCloseFriendModal">Close</button>
+
+            <div class="modal-actions dual">
+                <button class="btn btn-primary-action" id="btnSubmitCreateGame">⚡ Create Game</button>
+                <button class="btn btn-decline" id="btnCloseCreateModal">Cancel</button>
             </div>
         </div>
     </div>
 
-    <!-- ─── Join Game Modal ────────────────────────────────────── -->
+    <!-- ─── Play With Friend / Game Created Modal (Phase 10) ────── -->
+    <div class="modal-overlay" id="playFriendModal">
+        <div class="modal">
+            <div class="modal-icon text-emerald">✅</div>
+            <div class="modal-title">Game created.</div>
+            <div class="modal-message">Share with your friend:</div>
+            <div class="share-box">
+                <input type="text" id="friendInviteLink" readonly value="" placeholder="Generating invite link...">
+                <button class="btn btn-primary-action" id="btnCopyInviteLink">📋 COPY INVITE LINK</button>
+            </div>
+            <div class="room-code-display">
+                Game ID: <strong id="friendRoomCode">ARENA-XXXX</strong>
+                <span class="tc-summary-tag" id="friendModalTc">10+0 • Rapid</span>
+            </div>
+            <div class="waiting-friend-pulse">
+                <span class="pulsing-radar-dot"></span>
+                <span id="waitingFriendText">Waiting for your friend to join...</span>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-decline" id="btnCloseFriendModal">Cancel & Return to Lobby</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Join Game Modal (Phase 10) ─────────────────────────── -->
     <div class="modal-overlay" id="joinGameModal">
         <div class="modal">
             <div class="modal-icon text-amber">🔍</div>
             <div class="modal-title">Join Game</div>
-            <div class="modal-message">Enter the 6-character room code provided by your opponent:</div>
+            <div class="modal-message">Enter the Game ID or paste invite link provided by your friend:</div>
             <div class="join-input-wrap">
-                <input type="text" id="joinRoomInput" placeholder="e.g. ARENA-7821" maxlength="15" autocomplete="off">
+                <input type="text" id="joinRoomInput" placeholder="e.g. ARENA-7821 or full link" maxlength="80" autocomplete="off">
             </div>
             <div class="modal-actions dual">
                 <button class="btn btn-primary-action" id="btnConfirmJoinGame">Join Match</button>

@@ -1589,16 +1589,41 @@ if (btnFindOpponent) btnFindOpponent.addEventListener("click", startMatchmakingS
 if (btnCancelSearch) btnCancelSearch.addEventListener("click", cancelMatchmakingSearch);
 
 // ─── Mode Cards & Interactive Modals ───────────────────────────
-const modeFriend     = document.getElementById("modeFriend");
-const modeCreateGame = document.getElementById("modeCreateGame");
-const modeJoinGame   = document.getElementById("modeJoinGame");
-const modeVsBot      = document.getElementById("modeVsBot");
-const modePuzzles    = document.getElementById("modePuzzles");
-const modeHistory    = document.getElementById("modeHistory");
-const modeProfile    = document.getElementById("modeProfile");
+const modeFriend             = document.getElementById("modeFriend");
+const modeCreateGame         = document.getElementById("modeCreateGame");
+const modeJoinGame           = document.getElementById("modeJoinGame");
+const modeVsBot              = document.getElementById("modeVsBot");
+const modePuzzles            = document.getElementById("modePuzzles");
+const modeHistory            = document.getElementById("modeHistory");
+const modeProfile            = document.getElementById("modeProfile");
 
-if (modeFriend) modeFriend.addEventListener("click", () => openModal(playFriendModal));
-if (modeCreateGame) modeCreateGame.addEventListener("click", () => openModal(playFriendModal));
+const createGameModal        = document.getElementById("createGameModal");
+const createGameTcSelect     = document.getElementById("createGameTcSelect");
+const btnSubmitCreateGame    = document.getElementById("btnSubmitCreateGame");
+const btnCloseCreateModal    = document.getElementById("btnCloseCreateModal");
+const btnColorPicks          = document.querySelectorAll(".btn-color-pick");
+const friendModalTc          = document.getElementById("friendModalTc");
+const waitingFriendText      = document.getElementById("waitingFriendText");
+const privateRoomBar         = document.getElementById("privateRoomBar");
+const gameRoomCode           = document.getElementById("gameRoomCode");
+const btnCopyRoomCode        = document.getElementById("btnCopyRoomCode");
+const spectatorIndicatorPill = document.getElementById("spectatorIndicatorPill");
+
+let selectedCreateColor = "w";
+let activeGameRoomId = "default";
+
+// Color selection in Create Game Modal
+btnColorPicks.forEach(btn => {
+    btn.addEventListener("click", () => {
+        btnColorPicks.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        selectedCreateColor = btn.dataset.color || "w";
+    });
+});
+
+// Mode Card Click Listeners
+if (modeFriend) modeFriend.addEventListener("click", () => openModal(createGameModal));
+if (modeCreateGame) modeCreateGame.addEventListener("click", () => openModal(createGameModal));
 if (modeJoinGame) modeJoinGame.addEventListener("click", () => openModal(joinGameModal));
 if (modeVsBot) modeVsBot.addEventListener("click", () => openModal(vsComputerModal));
 if (modePuzzles) modePuzzles.addEventListener("click", () => openModal(puzzlesModal));
@@ -1606,12 +1631,31 @@ if (modeHistory) modeHistory.addEventListener("click", () => openModal(historyMo
 if (modeProfile) modeProfile.addEventListener("click", () => openModal(profileModal));
 if (userMenu) userMenu.addEventListener("click", () => openModal(profileModal));
 
+// Create Game Form Handlers
+if (btnCloseCreateModal) btnCloseCreateModal.addEventListener("click", () => closeModal(createGameModal));
+if (btnSubmitCreateGame) {
+    btnSubmitCreateGame.addEventListener("click", () => {
+        const tc = createGameTcSelect ? createGameTcSelect.value : "10+0";
+        closeModal(createGameModal);
+        openModal(playFriendModal);
+        if (waitingFriendText) waitingFriendText.textContent = "Creating room & generating link...";
+        socket.emit("createPrivateGame", {
+            timeControl: tc,
+            preferredColor: selectedCreateColor,
+            sessionToken: sessionToken
+        });
+    });
+}
+
+// Play Friend Modal Handlers
 if (btnCloseFriendModal) btnCloseFriendModal.addEventListener("click", () => closeModal(playFriendModal));
 if (btnCopyInviteLink) {
     btnCopyInviteLink.addEventListener("click", () => {
         if (friendInviteLink) {
             friendInviteLink.select();
             navigator.clipboard.writeText(friendInviteLink.value).then(() => {
+                btnCopyInviteLink.textContent = "✔ COPIED!";
+                setTimeout(() => { btnCopyInviteLink.textContent = "📋 COPY INVITE LINK"; }, 2500);
                 showToast("Invite link copied to clipboard!");
             }).catch(() => {
                 showToast("Link copied!");
@@ -1620,17 +1664,33 @@ if (btnCopyInviteLink) {
     });
 }
 
+// Compact Copy Button in Active Game Banner
+if (btnCopyRoomCode) {
+    btnCopyRoomCode.addEventListener("click", () => {
+        const inviteUrl = window.location.origin + "/?game=" + (activeGameRoomId || "default");
+        navigator.clipboard.writeText(inviteUrl).then(() => {
+            btnCopyRoomCode.textContent = "✔ Copied";
+            setTimeout(() => { btnCopyRoomCode.textContent = "📋 Copy Link"; }, 2500);
+            showToast("Game invite link copied!");
+        });
+    });
+}
+
+// Join Game Modal Handlers
 if (btnCloseJoinModal) btnCloseJoinModal.addEventListener("click", () => closeModal(joinGameModal));
 if (btnConfirmJoinGame) {
     btnConfirmJoinGame.addEventListener("click", () => {
         const code = joinRoomInput.value.trim();
         if (!code) {
-            showToast("Please enter a room code");
+            showToast("Please enter a Game ID or invite link");
             return;
         }
         closeModal(joinGameModal);
-        showGame();
-        showToast(`Joined room: ${code}`);
+        showToast(`Connecting to match ${code}...`);
+        socket.emit("joinPrivateGame", {
+            roomId: code,
+            sessionToken: sessionToken
+        });
     });
 }
 
@@ -1889,6 +1949,59 @@ socket.on("matchFound", (data) => {
     playSound("notify");
 });
 
+// Phase 10: Private Game Socket Handlers
+socket.on("privateGameCreated", (data) => {
+    activeGameRoomId = data.roomId;
+    openModal(playFriendModal);
+    if (friendRoomCode) friendRoomCode.textContent = data.roomId;
+    if (friendModalTc && data.timeControl) friendModalTc.textContent = data.timeControl.label;
+    if (friendInviteLink) {
+        friendInviteLink.value = window.location.origin + (data.inviteUrl || `/?game=${data.roomId}`);
+    }
+    if (waitingFriendText) waitingFriendText.textContent = "Waiting for your friend to join...";
+    if (gameRoomCode) gameRoomCode.textContent = data.roomId;
+    if (privateRoomBar) privateRoomBar.style.display = "flex";
+    showToast(`Game created! Share the invite link with your friend.`, 4000);
+});
+
+socket.on("privateGameJoined", (data) => {
+    activeGameRoomId = data.roomId;
+    closeModal(joinGameModal);
+    showGame();
+    if (gameRoomCode) gameRoomCode.textContent = data.roomId;
+    if (privateRoomBar) privateRoomBar.style.display = "flex";
+
+    if (data.isSpectator) {
+        playerRole = null;
+        if (spectatorIndicatorPill) spectatorIndicatorPill.style.display = "inline-flex";
+        showToast(`Spectating private match ${data.roomId}`, 3500);
+    } else {
+        if (spectatorIndicatorPill) spectatorIndicatorPill.style.display = "none";
+        showToast(`Joined match as ${data.role === "w" ? "White" : "Black"}!`, 3500);
+    }
+    playSound("notify");
+});
+
+socket.on("privateGameReady", (data) => {
+    activeGameRoomId = data.roomId;
+    closeModal(playFriendModal);
+    closeModal(createGameModal);
+    showGame();
+    if (gameRoomCode) gameRoomCode.textContent = data.roomId;
+    if (privateRoomBar) privateRoomBar.style.display = "flex";
+    if (spectatorIndicatorPill) spectatorIndicatorPill.style.display = "none";
+    showToast(data.message || "Friend joined! White and Black are seated. Good luck!", 4000);
+    playSound("notify");
+});
+
+socket.on("privateGameError", (data) => {
+    showToast((data && data.message) ? data.message : "Private game error", 4000);
+});
+
+socket.on("unauthorizedAction", (data) => {
+    showToast((data && data.message) ? data.message : "Unauthorized action: Spectators cannot move pieces.", 3000);
+});
+
 // Connection state & Real-time Reconnection (Phase 8)
 socket.on("connect", () => {
     const dot = document.getElementById("connectionDot");
@@ -1898,6 +2011,18 @@ socket.on("connect", () => {
 
     // Re-identify with persistent session token
     socket.emit("identify", { sessionToken });
+
+    // Phase 10: Auto-join if URL contains game ID or room param
+    const urlParams = new URLSearchParams(window.location.search);
+    let urlGame = urlParams.get("game") || urlParams.get("room");
+    if (!urlGame && window.location.pathname.startsWith("/game/")) {
+        urlGame = window.location.pathname.split("/")[2];
+    }
+    if (urlGame) {
+        urlGame = urlGame.trim().toUpperCase();
+        socket.emit("joinPrivateGame", { roomId: urlGame, sessionToken });
+        showToast(`Connecting to game ${urlGame}...`, 3000);
+    }
 });
 
 socket.on("reconnected", (data) => {
