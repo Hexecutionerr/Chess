@@ -32,6 +32,10 @@ const playerSchema = new mongoose.Schema({
         default: "Magnus_G",
         index: true
     },
+    title: {
+        type: String,
+        default: null
+    },
     avatarColor: {
         type: String,
         default: "#3b82f6"

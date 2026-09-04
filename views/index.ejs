@@ -44,6 +44,12 @@
                         </svg>
                         <span>Puzzles</span>
                     </a>
+                    <a href="#" class="nav-item" id="navLeaderboard" title="Leaderboard">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/>
+                        </svg>
+                        <span>Leaderboard</span>
+                    </a>
                     <a href="#" class="nav-item" id="navHistory" title="Game History">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"/>
@@ -266,7 +272,17 @@
                             <span class="mode-arrow">➔</span>
                         </div>
 
-                        <!-- 6. Game History -->
+                        <!-- 6. Leaderboard (Phase 15) -->
+                        <div class="mode-card" id="modeLeaderboard">
+                            <div class="mode-icon-wrap bg-amber">🏆</div>
+                            <div class="mode-info">
+                                <h3 class="mode-title">Leaderboard</h3>
+                                <p class="mode-desc">Global & weekly rankings, ratings and win rates</p>
+                            </div>
+                            <span class="mode-arrow">➔</span>
+                        </div>
+
+                        <!-- 7. Game History -->
                         <div class="mode-card" id="modeHistory">
                             <div class="mode-icon-wrap bg-teal">📜</div>
                             <div class="mode-info">
@@ -821,8 +837,148 @@
                     <span class="hist-rating-change">+1</span>
                 </div>
             </div>
-            <div class="modal-actions">
-                <button class="btn btn-decline" id="btnCloseHistoryModal">Close</button>
+    <!-- ─── Leaderboard Modal (Phase 15) ────────────────────────── -->
+    <div class="modal-overlay" id="leaderboardModal">
+        <div class="modal modal-leaderboard">
+            <!-- Modal Header -->
+            <div class="lb-header">
+                <div class="lb-header-left">
+                    <div class="lb-trophy-badge">🏆</div>
+                    <div>
+                        <h2 class="lb-title">Global Leaderboard</h2>
+                        <p class="lb-subtitle">Official Rankings, Ratings & Competitive Performance</p>
+                    </div>
+                </div>
+                <button class="modal-close-btn" id="btnCloseLeaderboardTop" title="Close">✕</button>
+            </div>
+
+            <!-- Filter Controls: Categories & Timeframe -->
+            <div class="lb-controls-wrap">
+                <!-- Rating Category Pills -->
+                <div class="lb-categories-group">
+                    <span class="lb-group-label">CATEGORY:</span>
+                    <div class="lb-category-pills">
+                        <button type="button" class="lb-cat-btn" data-category="bullet">
+                            <span class="lb-cat-icon">🚀</span> Bullet
+                        </button>
+                        <button type="button" class="lb-cat-btn" data-category="blitz">
+                            <span class="lb-cat-icon">⚡</span> Blitz
+                        </button>
+                        <button type="button" class="lb-cat-btn active" data-category="rapid">
+                            <span class="lb-cat-icon">⏱️</span> Rapid
+                        </button>
+                        <button type="button" class="lb-cat-btn" data-category="classical">
+                            <span class="lb-cat-icon">🏛️</span> Classical
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Timeframe Tabs -->
+                <div class="lb-timeframe-group">
+                    <span class="lb-group-label">TIMEFRAME:</span>
+                    <div class="lb-timeframe-tabs">
+                        <button type="button" class="lb-time-btn active" data-timeframe="global">
+                            🌐 Global
+                        </button>
+                        <button type="button" class="lb-time-btn" data-timeframe="weekly">
+                            📅 Weekly
+                        </button>
+                        <button type="button" class="lb-time-btn" data-timeframe="monthly">
+                            🗓️ Monthly
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top 3 Podium Spotlight -->
+            <div class="lb-podium-section" id="lbPodiumSection">
+                <!-- #2 Silver -->
+                <div class="podium-card rank-2" id="podiumRank2">
+                    <div class="podium-avatar-wrap">
+                        <div class="podium-medal">🥈</div>
+                        <div class="podium-avatar" id="podiumAvatar2" style="background:#3b82f6;">HN</div>
+                    </div>
+                    <div class="podium-name" id="podiumName2">Hikaru_N</div>
+                    <div class="podium-rating" id="podiumRating2">2825</div>
+                    <div class="podium-games" id="podiumGames2">320 Games • 71.9% Win</div>
+                    <div class="podium-pedestal pedestal-2">
+                        <span class="pedestal-rank">#2</span>
+                    </div>
+                </div>
+
+                <!-- #1 Gold (Center, Elevated) -->
+                <div class="podium-card rank-1" id="podiumRank1">
+                    <div class="podium-crown">👑</div>
+                    <div class="podium-avatar-wrap">
+                        <div class="podium-medal gold">🥇</div>
+                        <div class="podium-avatar" id="podiumAvatar1" style="background:#eab308;">MC</div>
+                    </div>
+                    <div class="podium-name" id="podiumName1">Magnus_C</div>
+                    <div class="podium-rating" id="podiumRating1">2840</div>
+                    <div class="podium-games" id="podiumGames1">340 Games • 73.5% Win</div>
+                    <div class="podium-pedestal pedestal-1">
+                        <span class="pedestal-rank">#1</span>
+                    </div>
+                </div>
+
+                <!-- #3 Bronze -->
+                <div class="podium-card rank-3" id="podiumRank3">
+                    <div class="podium-avatar-wrap">
+                        <div class="podium-medal">🥉</div>
+                        <div class="podium-avatar" id="podiumAvatar3" style="background:#8b5cf6;">FC</div>
+                    </div>
+                    <div class="podium-name" id="podiumName3">Fabiano_C</div>
+                    <div class="podium-rating" id="podiumRating3">2800</div>
+                    <div class="podium-games" id="podiumGames3">295 Games • 69.5% Win</div>
+                    <div class="podium-pedestal pedestal-3">
+                        <span class="pedestal-rank">#3</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leaderboard Table Container -->
+            <div class="lb-table-container">
+                <table class="lb-table">
+                    <thead>
+                        <tr>
+                            <th class="col-rank">Rank</th>
+                            <th class="col-player">Player</th>
+                            <th class="col-rating">Rating</th>
+                            <th class="col-games">Games</th>
+                            <th class="col-winrate">Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lbTableBody">
+                        <!-- Dynamic Rows Injected By JavaScript -->
+                    </tbody>
+                </table>
+                <div class="lb-loading-state" id="lbLoadingState" style="display: none;">
+                    <div class="lb-spinner"></div>
+                    <span>Updating rankings...</span>
+                </div>
+            </div>
+
+            <!-- Sticky User Standing Bar -->
+            <div class="lb-user-standing-bar" id="lbUserStandingBar">
+                <div class="standing-left">
+                    <div class="standing-rank-badge" id="myStandingRank">#--</div>
+                    <div class="standing-avatar" id="myStandingAvatar">ME</div>
+                    <div class="standing-user-info">
+                        <div class="standing-name-row">
+                            <span class="standing-name" id="myStandingName">You</span>
+                            <span class="badge-standing-tag">YOUR STANDING</span>
+                        </div>
+                        <div class="standing-meta" id="myStandingMeta">1500 ELO • 0 Games</div>
+                    </div>
+                </div>
+                <div class="standing-right">
+                    <button class="btn btn-jump-my-rank" id="btnJumpMyRank">Scroll to My Rank 🎯</button>
+                </div>
+            </div>
+
+            <!-- Modal Action Footer -->
+            <div class="modal-actions lb-footer-actions">
+                <button class="btn btn-decline" id="btnCloseLeaderboardModal">Close Leaderboard</button>
             </div>
         </div>
     </div>

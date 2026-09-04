@@ -325,6 +325,32 @@ app.post("/api/ratings/calculate", (req, res) => {
     }
 });
 
+// ─── Leaderboard REST Endpoint (Phase 15) ──────────────────────
+app.get("/api/leaderboard", async (req, res) => {
+    try {
+        const category = req.query.category || "rapid";
+        const timeframe = req.query.timeframe || "global";
+        const limit = parseInt(req.query.limit, 10) || 50;
+        const currentUserToken = req.query.token || null;
+        const currentUsername = req.query.username || null;
+
+        const result = await db.getLeaderboard({
+            category,
+            timeframe,
+            limit,
+            currentUserToken,
+            currentUsername
+        });
+
+        res.json({
+            success: true,
+            ...result
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ─── Socket.IO Handler ────────────────────────────────────────
 io.on("connection", function (uniquesocket) {
     console.log(`[connect] Socket ${uniquesocket.id}`);

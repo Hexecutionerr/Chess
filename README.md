@@ -162,6 +162,17 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **REST API Endpoints:**
     - `GET /api/players/:identifier`: Fetch player stats and category ratings by username or sessionToken
     - `POST /api/ratings/calculate`: Test and calculate Elo changes between two ratings for any outcome
+- **Phase 15 Global Leaderboard & Dynamic Filters** — Comprehensive ranking engine and competitive leaderboards:
+  - **Core Metrics:** Rank (#1, #2, #3, ...), Player (Username, Title GM/IM/PRO, Avatar), Elo Rating, Games Played, and Win Rate with visual percentage track
+  - **Dynamic Timeframe Filters:**
+    - `Global`: All-time top rated players across the arena
+    - `Weekly`: Top players active within the last 7 days
+    - `Monthly`: Top contenders active within the last 30 days
+  - **Full Category Support:** Independent leaderboards for **Bullet**, **Blitz**, **Rapid**, and **Classical**
+  - **Top 3 Podium Spotlight:** Elevated Gold (#1 with crown), Silver (#2), and Bronze (#3) pedestals
+  - **Sticky User Standing Bar:** Real-time personal ranking badge with one-click "Scroll to My Rank 🎯" navigation
+  - **REST API Endpoints:**
+    - `GET /api/leaderboard`: Fetch ranked players with query filters (`category`, `timeframe`, `limit`, `token`, `username`)
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -305,11 +316,11 @@ joinPrivateGame {roomId, token}   privateGameCreated {roomId, inviteUrl, role, t
 | **Phase 8** | Real-Time Reconnection (Persistent Session Tokens, Preserved Game State & Clocks, Resynchronization, Anti-Duplicate Architecture) | ✅ Complete |
 | **Phase 9** | Game Lobby & Matchmaking (Homepage Lobby, Time Control Selectors, Radar Search, Friendly Games, Puzzles, History, Profile) | ✅ Complete |
 | **Phase 10** | Private Games & Anti-Interference (Create Game, Shareable Invite Link, Join Game, Correct Roles, Spectator Lockout) | ✅ Complete |
-| **Phase 11** | ELO Leaderboards & Ranking Ladders | 📋 Planned |
 | **Phase 12** | Player Profile (Avatar, Stats, Win Rate, Rating History SVG Curve, Recent Matches) | ✅ Complete |
 | **Phase 13** | Game Database (MongoDB Persistence for Active & Completed Games, 15 Model Fields, Move History, PGN, Proper Indexes, REST APIs) | ✅ Complete |
 | **Phase 14** | ELO Rating (Win/Loss/Draw Updates, Rating Categories, Casual/Aborted/Invalid Game Prevention, Live UI Badges) | ✅ Complete |
-| **Phase 15** | AI Opponent (Stockfish), Game Review & Deep Analysis Board | 📋 Planned |
+| **Phase 15** | Leaderboards & Ranking Ladders (Global/Weekly/Monthly Filters, Categories, Podium Spotlight, Sticky Standings) | ✅ Complete |
+| **Phase 16** | AI Opponent (Stockfish Integration), Game Review & Deep Analysis Board | 📋 Planned |
 
 ---
 

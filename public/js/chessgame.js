@@ -1851,6 +1851,268 @@ profileTcCards.forEach(tcCard => {
     });
 });
 
+// ─── Phase 15: Global Leaderboard & Rankings ───────────────────
+const navLeaderboard            = document.getElementById("navLeaderboard");
+const modeLeaderboard           = document.getElementById("modeLeaderboard");
+const leaderboardModal          = document.getElementById("leaderboardModal");
+const btnCloseLeaderboardModal  = document.getElementById("btnCloseLeaderboardModal");
+const btnCloseLeaderboardTop    = document.getElementById("btnCloseLeaderboardTop");
+const lbCatButtons              = document.querySelectorAll(".lb-cat-btn");
+const lbTimeButtons             = document.querySelectorAll(".lb-time-btn");
+const lbTableBody               = document.getElementById("lbTableBody");
+const lbLoadingState            = document.getElementById("lbLoadingState");
+const btnJumpMyRank             = document.getElementById("btnJumpMyRank");
+
+// Podium elements
+const podiumName1               = document.getElementById("podiumName1");
+const podiumRating1             = document.getElementById("podiumRating1");
+const podiumGames1              = document.getElementById("podiumGames1");
+const podiumAvatar1             = document.getElementById("podiumAvatar1");
+
+const podiumName2               = document.getElementById("podiumName2");
+const podiumRating2             = document.getElementById("podiumRating2");
+const podiumGames2              = document.getElementById("podiumGames2");
+const podiumAvatar2             = document.getElementById("podiumAvatar2");
+
+const podiumName3               = document.getElementById("podiumName3");
+const podiumRating3             = document.getElementById("podiumRating3");
+const podiumGames3              = document.getElementById("podiumGames3");
+const podiumAvatar3             = document.getElementById("podiumAvatar3");
+
+// User Standing Bar elements
+const myStandingRank            = document.getElementById("myStandingRank");
+const myStandingAvatar          = document.getElementById("myStandingAvatar");
+const myStandingName            = document.getElementById("myStandingName");
+const myStandingMeta            = document.getElementById("myStandingMeta");
+
+let selectedLbCategory = "rapid";
+let selectedLbTimeframe = "global";
+
+function getInitials(name) {
+    if (!name) return "??";
+    const parts = name.replace(/[^a-zA-Z0-9_]/g, "").split("_");
+    if (parts.length >= 2 && parts[0] && parts[1]) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+}
+
+function escapeHtml(text) {
+    if (!text) return "";
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+async function loadLeaderboard(category = selectedLbCategory, timeframe = selectedLbTimeframe) {
+    if (lbLoadingState) lbLoadingState.style.display = "flex";
+    try {
+        const url = `/api/leaderboard?category=${encodeURIComponent(category)}&timeframe=${encodeURIComponent(timeframe)}&token=${encodeURIComponent(sessionToken)}&username=${encodeURIComponent(currentUsername)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data || !data.success) {
+            showToast("Failed to load leaderboard data");
+            return;
+        }
+
+        renderLeaderboard(data);
+    } catch (err) {
+        console.error("Leaderboard fetch error:", err);
+        showToast("Error retrieving leaderboard data");
+    } finally {
+        if (lbLoadingState) lbLoadingState.style.display = "none";
+    }
+}
+
+function renderLeaderboard(data) {
+    const list = data.leaderboard || [];
+
+    // 1. Render Podium Top 3
+    const p1 = list[0];
+    const p2 = list[1];
+    const p3 = list[2];
+
+    if (p1) {
+        if (podiumName1) podiumName1.textContent = p1.username;
+        if (podiumRating1) podiumRating1.textContent = p1.rating;
+        if (podiumGames1) podiumGames1.textContent = `${p1.games} Games • ${p1.winRate} Win`;
+        if (podiumAvatar1) {
+            podiumAvatar1.textContent = getInitials(p1.username);
+            podiumAvatar1.style.background = p1.avatarColor || "#eab308";
+        }
+    }
+    if (p2) {
+        if (podiumName2) podiumName2.textContent = p2.username;
+        if (podiumRating2) podiumRating2.textContent = p2.rating;
+        if (podiumGames2) podiumGames2.textContent = `${p2.games} Games • ${p2.winRate} Win`;
+        if (podiumAvatar2) {
+            podiumAvatar2.textContent = getInitials(p2.username);
+            podiumAvatar2.style.background = p2.avatarColor || "#3b82f6";
+        }
+    }
+    if (p3) {
+        if (podiumName3) podiumName3.textContent = p3.username;
+        if (podiumRating3) podiumRating3.textContent = p3.rating;
+        if (podiumGames3) podiumGames3.textContent = `${p3.games} Games • ${p3.winRate} Win`;
+        if (podiumAvatar3) {
+            podiumAvatar3.textContent = getInitials(p3.username);
+            podiumAvatar3.style.background = p3.avatarColor || "#8b5cf6";
+        }
+    }
+
+    // 2. Render Table Rows
+    if (lbTableBody) {
+        lbTableBody.innerHTML = "";
+
+        if (list.length === 0) {
+            const emptyTr = document.createElement("tr");
+            emptyTr.innerHTML = `<td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">No active players found for this period.</td>`;
+            lbTableBody.appendChild(emptyTr);
+        } else {
+            list.forEach(player => {
+                const tr = document.createElement("tr");
+                tr.className = "lb-row" + (player.isCurrentUser ? " is-current-user" : "");
+                if (player.isCurrentUser) {
+                    tr.id = "lbRowCurrentUser";
+                }
+
+                let rankBadgeClass = "lb-rank-badge";
+                if (player.rank === 1) rankBadgeClass += " rank-top-1";
+                else if (player.rank === 2) rankBadgeClass += " rank-top-2";
+                else if (player.rank === 3) rankBadgeClass += " rank-top-3";
+
+                let titleBadge = "";
+                if (player.title === "GM") {
+                    titleBadge = `<span class="badge-gm">GM</span>`;
+                } else if (player.title === "IM") {
+                    titleBadge = `<span class="badge-im">IM</span>`;
+                } else if (player.title) {
+                    titleBadge = `<span class="badge-pro">${escapeHtml(player.title)}</span>`;
+                }
+
+                const youBadge = player.isCurrentUser ? `<span class="badge-you">YOU</span>` : "";
+                const winPctNum = parseFloat(player.winRate) || 0;
+
+                tr.innerHTML = `
+                    <td class="col-rank">
+                        <span class="${rankBadgeClass}">#${player.rank}</span>
+                    </td>
+                    <td class="col-player">
+                        <div class="lb-player-cell">
+                            <div class="lb-mini-avatar" style="background: ${player.avatarColor || '#3b82f6'};">
+                                ${getInitials(player.username)}
+                            </div>
+                            <div class="lb-player-info">
+                                <span class="lb-username">${escapeHtml(player.username)}</span>
+                                ${titleBadge}
+                                ${youBadge}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="col-rating">
+                        <span class="lb-rating-val">${player.rating}</span>
+                    </td>
+                    <td class="col-games">
+                        <span class="lb-games-val">${player.games}</span>
+                    </td>
+                    <td class="col-winrate">
+                        <div class="lb-winrate-bar-wrap">
+                            <div class="lb-winrate-track">
+                                <div class="lb-winrate-fill" style="width: ${Math.min(winPctNum, 100)}%;"></div>
+                            </div>
+                            <span class="lb-winrate-pct">${player.winRate}</span>
+                        </div>
+                    </td>
+                `;
+
+                lbTableBody.appendChild(tr);
+            });
+        }
+    }
+
+    // 3. Render Sticky User Standing Bar
+    const ur = data.userRank;
+    if (ur) {
+        if (myStandingRank) myStandingRank.textContent = `#${ur.rank}`;
+        if (myStandingName) myStandingName.textContent = ur.username || currentUsername;
+        if (myStandingAvatar) {
+            myStandingAvatar.textContent = getInitials(ur.username || currentUsername);
+            myStandingAvatar.style.background = ur.avatarColor || "#3b82f6";
+        }
+        if (myStandingMeta) {
+            myStandingMeta.textContent = `${ur.rating} ELO • ${ur.games} Games • ${ur.winRate} Win`;
+        }
+    } else {
+        if (myStandingRank) myStandingRank.textContent = "#--";
+        if (myStandingName) myStandingName.textContent = currentUsername;
+        if (myStandingAvatar) myStandingAvatar.textContent = getInitials(currentUsername);
+        if (myStandingMeta) myStandingMeta.textContent = "Unranked in this category";
+    }
+}
+
+// Open / Close Listeners
+if (navLeaderboard) {
+    navLeaderboard.addEventListener("click", (e) => {
+        e.preventDefault();
+        openModal(leaderboardModal);
+        loadLeaderboard(selectedLbCategory, selectedLbTimeframe);
+    });
+}
+
+if (modeLeaderboard) {
+    modeLeaderboard.addEventListener("click", () => {
+        openModal(leaderboardModal);
+        loadLeaderboard(selectedLbCategory, selectedLbTimeframe);
+    });
+}
+
+if (btnCloseLeaderboardModal) {
+    btnCloseLeaderboardModal.addEventListener("click", () => closeModal(leaderboardModal));
+}
+
+if (btnCloseLeaderboardTop) {
+    btnCloseLeaderboardTop.addEventListener("click", () => closeModal(leaderboardModal));
+}
+
+// Category filter buttons
+lbCatButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+        lbCatButtons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedLbCategory = btn.dataset.category || "rapid";
+        loadLeaderboard(selectedLbCategory, selectedLbTimeframe);
+    });
+});
+
+// Timeframe filter buttons
+lbTimeButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+        lbTimeButtons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedLbTimeframe = btn.dataset.timeframe || "global";
+        loadLeaderboard(selectedLbCategory, selectedLbTimeframe);
+    });
+});
+
+// Jump to current user rank button
+if (btnJumpMyRank) {
+    btnJumpMyRank.addEventListener("click", () => {
+        const userRow = document.getElementById("lbRowCurrentUser");
+        if (userRow) {
+            userRow.scrollIntoView({ behavior: "smooth", block: "center" });
+            userRow.style.transition = "outline 0.3s ease";
+            userRow.style.outline = "2px solid #3b82f6";
+            setTimeout(() => { userRow.style.outline = "none"; }, 2000);
+        } else {
+            showToast("Your rank is outside current visible rankings");
+        }
+    });
+}
+
 // ─── Socket.IO Event Handlers ─────────────────────────────────
 
 // Full game state
