@@ -4,94 +4,302 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title><%= title %></title>
-    <meta name="description" content="Play chess online in real-time. Drag-and-drop or click to move. Multiplayer with spectator support.">
+    <meta name="description" content="Play professional chess online in real-time. Features live clocks, captured pieces, move notation, and multiplayer chat.">
     <link rel="stylesheet" href="/css/styles.css">
-    <!-- Preload piece images for instant rendering -->
+    <!-- Preload critical piece assets -->
     <link rel="preload" href="/img/pieces/wK.svg" as="image">
     <link rel="preload" href="/img/pieces/bK.svg" as="image">
 </head>
 <body>
     <div class="app">
-        <!-- ─── Header ─────────────────────────────────────── -->
-        <header class="header">
-            <div class="header-brand">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L9 7H6l-1 4h2l-2 8h14l-2-8h2l-1-4h-3L12 2z" fill="var(--accent-primary)" stroke="var(--accent-primary)"/>
-                </svg>
-                <h1>Chess<span>Arena</span></h1>
+        <!-- ─── NAVBAR ─────────────────────────────────────────────── -->
+        <header class="navbar">
+            <div class="navbar-left">
+                <a href="/" class="brand">
+                    <div class="brand-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L9 7H6l-1 4h2l-2 8h14l-2-8h2l-1-4h-3L12 2z" fill="var(--accent-emerald)" stroke="var(--accent-emerald)"/>
+                        </svg>
+                    </div>
+                    <span class="brand-name">Chess<span>Arena</span></span>
+                    <span class="brand-tag">PRO</span>
+                </a>
+
+                <nav class="nav-links">
+                    <a href="#" class="nav-item active" title="Play Chess">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H7v-4h4v4zm0-6H7V7h4v4zm6 6h-4v-4h4v4zm0-6h-4V7h4v4z"/>
+                        </svg>
+                        <span>Play</span>
+                    </a>
+                    <a href="#" class="nav-item" title="Daily Puzzles">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+                        </svg>
+                        <span>Puzzles</span>
+                    </a>
+                    <a href="#" class="nav-item" title="Lessons & Openings">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                        </svg>
+                        <span>Learn</span>
+                    </a>
+                    <a href="#" class="nav-item" title="Watch Grandmaster Games">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+                        </svg>
+                        <span>Watch</span>
+                    </a>
+                </nav>
             </div>
-            <div class="header-status">
-                <div class="status-dot" id="connectionDot"></div>
-                <span id="connectionText">Connected</span>
+
+            <div class="navbar-right">
+                <div class="connection-status" id="connectionPill">
+                    <span class="status-indicator-dot" id="connectionDot"></span>
+                    <span class="status-indicator-text" id="connectionText">Connected</span>
+                </div>
+
+                <div class="user-menu" id="userMenu">
+                    <div class="user-avatar" id="myNavAvatar">
+                        <span>GM</span>
+                    </div>
+                    <div class="user-info-text">
+                        <span class="user-name" id="myNavName">Player</span>
+                        <span class="user-rating-badge" id="myNavRating">1540</span>
+                    </div>
+                    <svg class="menu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </div>
             </div>
         </header>
 
-        <!-- ─── Game Area ──────────────────────────────────── -->
-        <main class="game-area">
-            <div class="game-container">
-                <!-- Opponent Bar (top) -->
-                <div class="player-bar top" id="opponentBar">
-                    <div class="player-info">
-                        <div class="player-color-icon" id="opponentIcon">♚</div>
-                        <div class="player-details">
-                            <div class="player-name" id="opponentName">Opponent</div>
-                            <div class="player-label" id="opponentLabel">Waiting...</div>
+        <!-- ─── MAIN GAME LAYOUT ───────────────────────────────────── -->
+        <main class="main-layout">
+            <!-- ── Left/Center: Game Viewport ── -->
+            <section class="game-viewport">
+                <!-- Opponent Strip -->
+                <div class="player-strip opponent" id="opponentBar">
+                    <div class="player-meta">
+                        <div class="avatar-wrap">
+                            <div class="avatar" id="opponentAvatar" style="background: linear-gradient(135deg, #10b981, #059669);">
+                                <span id="opponentAvatarText">OP</span>
+                            </div>
+                            <span class="online-indicator" id="opponentOnlineDot" title="Online"></span>
+                        </div>
+                        <div class="player-text">
+                            <div class="name-rating-row">
+                                <span class="player-name" id="opponentName">Opponent</span>
+                                <span class="rating-badge" id="opponentRating">1515</span>
+                                <span class="player-role-tag" id="opponentLabel">Waiting...</span>
+                            </div>
+                            <!-- Opponent captured pieces tray -->
+                            <div class="captured-tray" id="opponentCaptured">
+                                <div class="captured-pieces" id="opponentCapturedPieces"></div>
+                                <span class="material-lead" id="opponentMaterialLead"></span>
+                            </div>
                         </div>
                     </div>
-                    <div class="turn-badge">
-                        <div class="turn-badge-dot"></div>
-                        TURN
+
+                    <div class="player-timing">
+                        <div class="turn-indicator" id="opponentTurnBadge">
+                            <span class="turn-dot"></span>
+                            <span class="turn-text">TURN</span>
+                        </div>
+                        <div class="chess-clock" id="opponentClock">10:00</div>
                     </div>
                 </div>
 
-                <!-- Board with Rank/File Labels -->
-                <div class="board-wrapper" id="boardWrapper">
+                <!-- Board Frame with Coordinates -->
+                <div class="board-frame" id="boardWrapper">
                     <div class="rank-labels" id="rankLabels"></div>
                     <div class="chessboard" id="chessboard"></div>
                     <div class="file-labels" id="fileLabels"></div>
                 </div>
 
-                <!-- Player Bar (bottom) -->
-                <div class="player-bar bottom" id="playerBar">
-                    <div class="player-info">
-                        <div class="player-color-icon" id="playerIcon">♔</div>
-                        <div class="player-details">
-                            <div class="player-name" id="playerName">You</div>
-                            <div class="player-label" id="playerLabel">Connecting...</div>
+                <!-- User Player Strip -->
+                <div class="player-strip player" id="playerBar">
+                    <div class="player-meta">
+                        <div class="avatar-wrap">
+                            <div class="avatar" id="playerAvatar" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);">
+                                <span id="playerAvatarText">ME</span>
+                            </div>
+                            <span class="online-indicator" id="playerOnlineDot" title="Online"></span>
+                        </div>
+                        <div class="player-text">
+                            <div class="name-rating-row">
+                                <span class="player-name" id="playerName">You</span>
+                                <span class="rating-badge" id="playerRating">1540</span>
+                                <span class="player-role-tag" id="playerLabel">Connecting...</span>
+                            </div>
+                            <!-- Player captured pieces tray -->
+                            <div class="captured-tray" id="playerCaptured">
+                                <div class="captured-pieces" id="playerCapturedPieces"></div>
+                                <span class="material-lead" id="playerMaterialLead"></span>
+                            </div>
                         </div>
                     </div>
-                    <div class="turn-badge">
-                        <div class="turn-badge-dot"></div>
-                        TURN
+
+                    <div class="player-timing">
+                        <div class="turn-indicator" id="playerTurnBadge">
+                            <span class="turn-dot"></span>
+                            <span class="turn-text">TURN</span>
+                        </div>
+                        <div class="chess-clock" id="playerClock">10:00</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── Right Panel: Moves, Chat & Controls ── -->
+            <aside class="right-panel">
+                <!-- Match & Game Status Card -->
+                <div class="panel-card game-status-card">
+                    <div class="status-header">
+                        <div class="match-type">
+                            <svg viewBox="0 0 24 24" fill="currentColor" class="match-icon">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                            <span>Live Match • 10 min Rapid</span>
+                        </div>
+                        <div class="game-turn-pill" id="gameTurnPill">
+                            <span class="pill-dot"></span>
+                            <span id="turnStatusText">White's Turn</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Captured Pieces Summary Bar -->
+                    <div class="material-summary-bar">
+                        <div class="material-side">
+                            <span class="mat-label">White captures:</span>
+                            <div class="mini-piece-list" id="whiteCapturesList"></div>
+                        </div>
+                        <div class="material-side">
+                            <span class="mat-label">Black captures:</span>
+                            <div class="mini-piece-list" id="blackCapturesList"></div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Game Controls -->
-                <div class="game-controls" id="gameControls">
-                    <button class="btn btn-resign" id="btnResign" disabled>
-                        ⚑ Resign
-                    </button>
+                <!-- Move History Table -->
+                <div class="panel-card moves-card">
+                    <div class="moves-card-header">
+                        <div class="moves-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                            <span>Move Notation</span>
+                        </div>
+                        <span class="move-count-badge" id="moveCountBadge">0 moves</span>
+                    </div>
+
+                    <div class="moves-table-wrap" id="movesTableWrap">
+                        <table class="moves-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>White</th>
+                                    <th>Black</th>
+                                </tr>
+                            </thead>
+                            <tbody id="movesBody">
+                                <!-- Dynamically populated moves -->
+                            </tbody>
+                        </table>
+                        <div class="no-moves-placeholder" id="noMovesMsg">
+                            <span>Game in progress. Moves will record here.</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
+
+                <!-- Chat & Controls Area -->
+                <div class="panel-card interactions-card">
+                    <!-- Action Buttons -->
+                    <div class="game-action-toolbar">
+                        <button class="action-btn btn-draw" id="btnOfferDraw" title="Offer a draw">
+                            ½ Draw
+                        </button>
+                        <button class="action-btn btn-resign" id="btnResign" title="Resign game" disabled>
+                            ⚑ Resign
+                        </button>
+                        <button class="action-btn btn-flip" id="btnFlip" title="Flip Board">
+                            🔄 Flip
+                        </button>
+                        <button class="action-btn btn-newgame-sm" id="btnQuickNewGame" title="New Game">
+                            ⚡ New Game
+                        </button>
+                    </div>
+
+                    <!-- Chat Header -->
+                    <div class="chat-header">
+                        <div class="chat-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <span>Game Chat & Activity</span>
+                        </div>
+                    </div>
+
+                    <!-- Chat Messages Log -->
+                    <div class="chat-log" id="chatLog">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <!-- Chat Input Form -->
+                    <form class="chat-input-bar" id="chatForm">
+                        <input
+                            type="text"
+                            id="chatInput"
+                            placeholder="Type a message..."
+                            maxlength="150"
+                            autocomplete="off"
+                        >
+                        <button type="submit" class="btn-chat-send" id="btnChatSend" title="Send message">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </aside>
         </main>
     </div>
 
-    <!-- ─── Game Over Modal ────────────────────────────────── -->
+    <!-- ─── Game Over Modal ────────────────────────────────────── -->
     <div class="modal-overlay" id="gameOverModal">
         <div class="modal">
             <div class="modal-icon" id="modalIcon">♔</div>
             <div class="modal-title" id="modalTitle">Game Over</div>
             <div class="modal-message" id="modalMessage">Result details</div>
             <div class="modal-actions">
-                <button class="btn btn-newgame" id="btnNewGame">♟ New Game</button>
+                <button class="btn btn-newgame" id="btnNewGame">♟ Play Again</button>
             </div>
         </div>
     </div>
 
-    <!-- ─── Toast ──────────────────────────────────────────── -->
+    <!-- ─── Draw Offer Modal ───────────────────────────────────── -->
+    <div class="modal-overlay" id="drawOfferModal">
+        <div class="modal">
+            <div class="modal-icon">🤝</div>
+            <div class="modal-title">Draw Offered</div>
+            <div class="modal-message" id="drawOfferMessage">Your opponent is offering a draw. Do you accept?</div>
+            <div class="modal-actions dual">
+                <button class="btn btn-accept" id="btnAcceptDraw">Accept Draw</button>
+                <button class="btn btn-decline" id="btnDeclineDraw">Decline</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Toast ──────────────────────────────────────────────── -->
     <div class="toast" id="toast"></div>
 
-    <!-- ─── Scripts ────────────────────────────────────────── -->
+    <!-- ─── Scripts ────────────────────────────────────────────── -->
     <script
         src="https://cdn.socket.io/4.8.1/socket.io.min.js"
         integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"

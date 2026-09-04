@@ -27,31 +27,31 @@ A polished, production-quality, real-time multiplayer chess platform built with 
 ### 🎮 Gameplay & Chess Mechanics
 - **Full Chess Rules Engine** — Powered by `chess.js` on both client and server
 - **Server-Side Move Validation** — All moves validated server-side to prevent cheating
+- **10-Minute Rapid Chess Clocks** — Real-time countdown clocks synchronized across players with timeout detection and low-time flash
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
-- **Game-Over Detection** — Checkmate, stalemate, threefold repetition, insufficient material, 50-move rule
-- **Resign** — Players can resign with confirmation dialog
-- **New Game** — Reset and play again without refreshing
+- **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
+- **Draw Offers** — In-game draw offer protocol with mutual consent confirmation
+- **Resign & Quick Reset** — Clean surrender mechanics with confirmation modals
+- **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
 
-### 🌐 Real-Time Multiplayer
+### 🌐 Real-Time Multiplayer & Social
 - **WebSocket Architecture** — Instant synchronization via Socket.IO
+- **Live In-Game Chat** — Real-time communication channel with role badges and system activity logs
 - **Dynamic Role Assignment** — 1st player = White, 2nd = Black, 3rd+ = Spectators
-- **Player Disconnect Handling** — Seats freed automatically on disconnect
-- **Live Board Sync** — Spectators and reconnecting players receive current game state immediately
+- **Player Disconnect Handling** — Seats freed automatically on disconnect with chat announcements
+- **Live Board Sync** — Spectators and reconnecting players receive current game state and move history immediately
 
-### 🎨 Professional UI/UX
-- **Dark Theme** — Custom design system with Inter font, layered backgrounds, and accent colors
-- **SVG Chess Pieces** — High-quality cburnett piece set (same set used by Lichess)
-- **Dual Input Controls** — Drag & drop **and** click-to-move
-- **Last-Move Highlighting** — Yellow highlight on the two squares of the most recent move
-- **Selected Piece Highlighting** — Green highlight + legal move indicators (dots and capture rings)
-- **Check Highlighting** — Red radial glow on the king's square when in check
-- **Turn Indicators** — Active turn shown with green badge + left border accent on player bar
-- **File/Rank Labels** — a-h and 1-8 labels that adapt based on player perspective
-- **Sound Effects** — Distinct sounds for moves, captures, and notifications
-- **Game-Over Modal** — Glassmorphism overlay with result, icon, and New Game button
-- **Toast Notifications** — Role assignment, invalid move, and new game alerts
-- **Connection Status** — Live indicator in header (green = connected, red = reconnecting)
-- **Responsive Design** — Scales cleanly from desktop to mobile
+### 🎨 Professional UI & Complete Layout
+- **Brand Navbar** — Platform header featuring Play, Puzzles, Learn, Watch, and User Profile menu with rating badges
+- **Dual Player Strips** — Opponent & Player cards with avatars, ratings, online indicators, and active turn pulses
+- **Live Chess Clocks** — High-legibility monospaced digital timers with active glowing states
+- **Material Evaluation & Captured Trays** — Visual trays of captured pieces with real-time material lead calculations (+1, +2, etc.)
+- **Algebraic Move Notation Panel** — Two-column moves table (`#`, `White`, `Black`) with active-move highlighting and auto-scroll
+- **Action Control Toolbar** — Integrated Draw, Resign, Flip, and New Game controls
+- **SVG Chess Pieces** — High-quality cburnett piece set with smooth drag-and-drop & click-to-move
+- **Highlights & Indicators** — Last-move highlight, check glow, legal move dots, and capture target rings
+- **Sound Effects & Haptics** — Move, capture, and notification audio feedback
+- **Responsive Layout** — Desktop 2-column split with responsive folding for smaller screens
 
 ---
 
