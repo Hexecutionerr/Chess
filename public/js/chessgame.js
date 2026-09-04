@@ -297,13 +297,13 @@ function renderLabels() {
 }
 
 // ─── Material & Captured Pieces Calculation ──────────────────
-function updateCapturedPieces() {
+function updateCapturedPieces(boardSource = chess) {
     const currentPieces = {
         w: { p: 0, n: 0, b: 0, r: 0, q: 0 },
         b: { p: 0, n: 0, b: 0, r: 0, q: 0 }
     };
 
-    const board = chess.board();
+    const board = (boardSource && typeof boardSource.board === "function") ? boardSource.board() : chess.board();
     board.forEach(row => {
         row.forEach(sq => {
             if (sq && sq.type !== "k") {
@@ -721,11 +721,13 @@ const renderBoard = () => {
     let displayTurn;
     let displayCheck;
     let displayLastMove = lastMove;
+    let activeChess = chess;
 
     if (isLive) {
         displayBoard = chess.board();
         displayTurn = chess.turn();
         displayCheck = chess.isCheck();
+        activeChess = chess;
     } else {
         const tempChess = new Chess();
         const targetFen = moveFens[viewingMoveIndex + 1] || tempChess.fen();
@@ -733,6 +735,7 @@ const renderBoard = () => {
         displayBoard = tempChess.board();
         displayTurn = tempChess.turn();
         displayCheck = tempChess.isCheck();
+        activeChess = tempChess;
 
         if (viewingMoveIndex >= 0 && moveHistory[viewingMoveIndex]) {
             displayLastMove = {
@@ -868,7 +871,7 @@ const renderBoard = () => {
     }
 
     updateTurnIndicators();
-    updateCapturedPieces();
+    updateCapturedPieces(activeChess);
 };
 
 // ─── Player Info & Roles UI ──────────────────────────────────

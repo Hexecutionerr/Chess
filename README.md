@@ -56,6 +56,11 @@ A polished, production-quality, real-time multiplayer chess platform built with 
   - **Rematch with Automatic Color Swapping:** Post-game rematch request protocol; accepting automatically swaps player colors (`White ⇄ Black`) per tournament standards
   - **Active-Match Reset Safeguards:** Starting a new game while moves are active triggers confirmation dialog to prevent accidental wipes
   - **Game-State-Enforced Actions:** Dynamic client and server validation automatically disables invalid actions based on game phase, turn, seated status, and move count
+- **Phase 6 Captured Pieces & Material Advantage** — Real-time piece differential and material balance:
+  - **Dual Captured Piece Trays:** Displays captured SVG pieces for both White and Black across player strips and match status summary
+  - **Standard Piece Sorting:** Ordered by standard piece values (`♟ Pawns`, `♞ Knights`, `♝ Bishops`, `♜ Rooks`, `♛ Queens`)
+  - **Material Lead Differential:** Subtle, clean real-time advantage badge (`+1`, `+2`, `+5`, etc.) showing exact point lead
+  - **Historical Scrubber Synchronization:** Dynamically recalculates captured pieces and material lead when scrubbing through historical moves
 - **Pawn Promotion** — Automatic queen promotion on reaching the opposite rank
 - **Game-Over Detection** — Checkmate, stalemate, timeout, resignation, threefold repetition, insufficient material, 50-move rule
 - **Board Flip** — On-demand perspective toggle for analysis or spectator convenience
@@ -180,9 +185,10 @@ newGame                      gameState {fen, turn, isCheck, history}
 | **Phase 3** | Professional Chess Clocks (1+0 to 30+0, Increments, Server Authority, Anti-Cheat, Sub-Second Decimals, Timeout Detection) | ✅ Complete |
 | **Phase 4** | Professional Move History (SAN Notation, Historical Position Review, Navigation Toolbar, Keyboard Controls, Non-Breaking Live Gameplay) | ✅ Complete |
 | **Phase 5** | Professional Game Controls (Offer/Accept/Decline Draw, Resign Modal, Leave Game Forfeit, Rematch with Color Swap, Reset Safeguards) | ✅ Complete |
-| **Phase 6** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
-| **Phase 7** | ELO ratings, leaderboards, player profiles | 📋 Planned |
-| **Phase 8** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
+| **Phase 6** | Captured Pieces & Material Advantage (Visual Piece Trays, Subtle Differential +1/+2, Historical Scrubber Sync) | ✅ Complete |
+| **Phase 7** | Game rooms, lobby, authentication, matchmaking, private games | 🔜 Planned |
+| **Phase 8** | ELO ratings, leaderboards, player profiles | 📋 Planned |
+| **Phase 9** | AI opponent (Stockfish), game review, analysis board | 📋 Planned |
 
 ---
 
